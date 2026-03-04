@@ -5,6 +5,13 @@
 #include "storage.h"
 #include <Arduino.h>
 
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+
+static int pinFailCount = 0;
+static unsigned long pinFirstFailTime = 0;
+static const int PIN_MAX_ATTEMPTS = 5;
+static const unsigned long PIN_LOCKOUT_MS = 300000UL; // 5 minutes
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 // Extracts value of "key" from a query string.
@@ -30,18 +37,43 @@ static void lockedButton(WiFiClient& client, const String& label, bool scheduleL
 
 // ─── PIN page ─────────────────────────────────────────────────────────────────
 
-static void servePinPage(WiFiClient& client) {
+static void servePinPage(WiFiClient& client, const String& errorMsg = "", bool locked = false) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-type:text/html");
   client.println("Connection: close");
   client.println();
-  client.println("<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
-  client.println("<style>body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:40px 10px;background-color:#efeff4;}.card{background:white;padding:30px;margin:60px auto;max-width:300px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.2rem;color:#333;}p{color:#888;font-size:0.9rem;}input[type=password]{padding:12px;width:100%;text-align:center;font-size:24px;letter-spacing:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;margin:15px 0;}.btn{width:100%;padding:15px;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;background-color:#007aff;color:white;}</style>");
-  client.println("</head><body><div class=\"card\"><h2>ClockHub</h2><p>Enter PIN to access</p>");
-  client.println("<form action=\"/LOGIN\" method=\"GET\">");
-  client.println("<input type=\"password\" name=\"pin\" maxlength=\"6\" placeholder=\"------\" autofocus>");
-  client.println("<button type=\"submit\" class=\"btn\">ACCESS</button>");
-  client.println("</form></div></body></html>");
+  client.println("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+  client.println("<style>body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:40px 10px;background-color:#efeff4;}.card{background:white;padding:30px;margin:60px auto;max-width:300px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.2rem;color:#333;margin-bottom:20px;}#pinInput{padding:12px;width:100%;text-align:center;font-size:26px;letter-spacing:10px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;margin-bottom:15px;caret-color:transparent;}.error{background:#ff3b30;color:white;padding:10px;border-radius:8px;margin-bottom:15px;font-size:0.9rem;}</style>");
+  client.println("</head><body><div class=\"card\"><h2>ClockHub</h2>");
+  if (errorMsg.length() > 0) {
+    client.println("<div class=\"error\">" + errorMsg + "</div>");
+  } else {
+    client.println("<p style=\"color:#888;font-size:0.9rem;margin-bottom:15px\">Inserisci il PIN per accedere</p>");
+  }
+  if (!locked) {
+    client.println("<form id=\"pinForm\" action=\"/\" method=\"GET\">");
+    client.println("<input type=\"text\" id=\"pinInput\" inputmode=\"numeric\" placeholder=\"PIN\" autocomplete=\"off\" autocorrect=\"off\" autocapitalize=\"off\" spellcheck=\"false\" autofocus>");
+    client.println("<input type=\"hidden\" name=\"pin\" id=\"pinHidden\">");
+    client.println("</form>");
+    client.println("<script>");
+    client.println("var pin='',timer=null,dot=String.fromCharCode(8226);");
+    client.println("var inp=document.getElementById('pinInput');");
+    client.println("var hid=document.getElementById('pinHidden');");
+    client.println("inp.addEventListener('input',function(){");
+    client.println("  var raw=this.value;");
+    client.println("  if(raw.length>pin.length){");
+    client.println("    pin+=raw.slice(pin.length).replace(/[^0-9]/g,'');");
+    client.println("  } else {");
+    client.println("    pin=pin.slice(0,raw.length);");
+    client.println("  }");
+    client.println("  this.value=dot.repeat(pin.length);");
+    client.println("  hid.value=pin;");
+    client.println("  clearTimeout(timer);");
+    client.println("  if(pin.length>0) timer=setTimeout(function(){document.getElementById('pinForm').submit();},1500);");
+    client.println("});");
+    client.println("</script>");
+  }
+  client.println("</div></body></html>");
 }
 
 // ─── Route handlers (side-effects only, no response) ─────────────────────────
@@ -246,9 +278,33 @@ void handleWebRequest() {
           }
 
           if (!isPinValid && request.indexOf("GET /CHECK_LOCK") < 0) {
-            servePinPage(client);
+            bool hasPin = (request.indexOf("pin=") >= 0);
+
+            // Reset lockout after 5 minutes
+            if (pinFailCount > 0 && (millis() - pinFirstFailTime) >= PIN_LOCKOUT_MS) {
+              pinFailCount = 0;
+            }
+
+            if (pinFailCount >= PIN_MAX_ATTEMPTS) {
+              int minsLeft = (int)((PIN_LOCKOUT_MS - (millis() - pinFirstFailTime)) / 60000) + 1;
+              servePinPage(client, "Troppi tentativi. Riprova tra " + String(minsLeft) + " min.", true);
+            } else if (hasPin) {
+              if (pinFailCount == 0) pinFirstFailTime = millis();
+              pinFailCount++;
+              int remaining = PIN_MAX_ATTEMPTS - pinFailCount;
+              if (remaining > 0) {
+                servePinPage(client, "PIN non corretto. Tentativi rimanenti: " + String(remaining));
+              } else {
+                servePinPage(client, "Troppi tentativi. Riprova tra 5 min.", true);
+              }
+            } else {
+              servePinPage(client);
+            }
             break;
           }
+
+          // Valid PIN — reset fail counter
+          pinFailCount = 0;
 
           String pinParam = "pin=" + String(access_pin);
           String hp = "<input type=\"hidden\" name=\"pin\" value=\"" + String(access_pin) + "\">";
