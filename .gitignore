@@ -1,0 +1,26 @@
+# PlatformIO build artifacts
+.pio
+
+# VS Code workspace settings
+.vscode/
+
+# =============================================================================
+# SECURITY: Files containing real credentials - NEVER commit these
+# =============================================================================
+
+# Developer's local credentials file (copy of .env.example with real values)
+.env
+
+# Auto-generated config header (built from .env by extra_scripts/load_env.py)
+src/config.h
+
+# =============================================================================
+# General
+# =============================================================================
+
+# macOS metadata
+.DS_Store
+
+# Windows Explorer metadata
+Thumbs.db
+desktop.ini
