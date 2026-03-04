@@ -85,7 +85,7 @@ Open a browser and navigate to the IP address you set in `ARDUINO_IP`. Enter you
         |
         └─> src/config.h  (auto-generated, gitignored)
               |
-              └─> src/main.cpp  (#include "config.h")
+              └─> src/main.cpp, src/network.cpp  (#include "config.h")
 ```
 
 `.env` is the single source of truth for all credentials. `src/config.h` is regenerated on every `pio run` and is never committed to git.
@@ -101,24 +101,34 @@ clockhub-arduino/
 ├── extra_scripts/
 │   └── load_env.py           # Reads .env, generates src/config.h
 └── src/
-    ├── main.cpp              # Main application
+    ├── main.cpp              # setup(), loop(), global definitions (~55 lines)
     ├── config.h              # Auto-generated (gitignored)
-    └── config.h.example      # config.h template for reference
+    ├── config.h.example      # config.h template for reference
+    ├── types.h               # DaySetting, Config structs and constants
+    ├── globals.h             # extern declarations for all shared globals
+    ├── storage.h / .cpp      # EEPROM: loadConfig(), saveConfig()
+    ├── time_utils.h / .cpp   # formatTime(), getWakeTime(), getBedTime()
+    ├── network.h / .cpp      # updateDuckDNS(), triggerVoiceMonkey(), setupWiFi()
+    ├── scheduler.h / .cpp    # isScheduleLocked(), runAlarmLogic()
+    └── web_server.h / .cpp   # HTTP server, route dispatch, HTML rendering
 ```
 
 ## Web Interface Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `/` | Main dashboard (requires PIN) |
-| `/LOGIN?pin=XXXXXX` | PIN authentication |
+| `/` | PIN page (unauthenticated) or main dashboard (with valid `pin=` param) |
 | `/SET_SCHEDULE` | Save weekly alarm schedule |
 | `/SET_GLOBAL` | Update pump duration and system enable |
 | `/SET_LIGHT_CONFIG` | Update light lead time |
 | `/SET_SLEEP_DELAY` | Update falling-asleep delay |
 | `/CALC_BED` | Calculate optimal bedtimes |
 | `/TOGGLE` | Manual pump on/off override |
-| `/CHECK_LOCK` | Lock state query (used by auto-refresh JS) |
+| `/CHECK_LOCK` | Lock state query (`0` or `1`, used by dashboard JS polling) |
+
+### PIN authentication
+
+The PIN page uses a custom JavaScript masking layer (`type="text"` + `inputmode="numeric"`) so characters are never visually displayed — only bullet points appear. The form submits automatically 1.5 seconds after the last keypress, without revealing the PIN length. After 5 failed attempts the interface locks for 5 minutes.
 
 ## Contributing
 
