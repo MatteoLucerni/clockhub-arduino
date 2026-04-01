@@ -9,6 +9,7 @@
 #include "network.h"
 #include "scheduler.h"
 #include "web_server.h"
+#include "time_utils.h"
 
 // ─── Global definitions (declared extern in globals.h) ────────────────────────
 
@@ -22,7 +23,7 @@ const char* access_pin  = ACCESS_PIN;
 
 WiFiServer   server(80);
 WiFiUDP      ntpUDP;
-NTPClient    timeClient(ntpUDP, "pool.ntp.org", 3600);
+NTPClient    timeClient(ntpUDP, "pool.ntp.org", 0); // offset set dynamically
 
 Config sysConfig;
 bool   alarmTriggered = false;
@@ -35,6 +36,7 @@ int  targetWakeM = 30;
 bool showBedTimes = false;
 
 unsigned long lastDuckDNSUpdate = 0;
+int           currentUTCOffset  = 3600; // CET default, updated automatically
 
 const char* daysOfWeek[] = {
   "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
@@ -54,6 +56,10 @@ void setup() {
 
 void loop() {
   timeClient.update();
+  // Derive UTC from current epoch (subtract previously applied offset), then recompute DST
+  unsigned long utcEpoch = timeClient.getEpochTime() - (unsigned long)currentUTCOffset;
+  currentUTCOffset = getItalyUTCOffset(utcEpoch);
+  timeClient.setTimeOffset(currentUTCOffset);
   updateDuckDNSIfNeeded();
   handleWebRequest();
   runAlarmLogic();

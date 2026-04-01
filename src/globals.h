@@ -33,6 +33,7 @@ extern bool showBedTimes;
 
 // Timing
 extern unsigned long lastDuckDNSUpdate;
+extern int currentUTCOffset;
 
 // Day names
 extern const char* daysOfWeek[];
