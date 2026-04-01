@@ -217,6 +217,7 @@ static void renderStatusCard(WiFiClient& client, const String& pinParam) {
 static void renderDashboard(WiFiClient& client, const String& hp, const String& pinParam, bool scheduleLocked) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-type:text/html");
+  client.println("Cache-Control: no-store");
   client.println("Connection: close");
   client.println();
   client.println("<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
