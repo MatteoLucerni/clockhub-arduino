@@ -1,7 +1,6 @@
 #include "time_utils.h"
 #include "globals.h"
 
-// Returns the epoch (UTC) of the last Sunday of `month` at 01:00 UTC for `year`.
 static unsigned long lastSundayEpoch(int year, int month) {
   static const int daysInMonth[] = {31,28,31,30,31,30,31,31,30,31,30,31};
   bool leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
@@ -16,14 +15,13 @@ static unsigned long lastSundayEpoch(int year, int month) {
   }
   int lastDay = daysInMonth[month - 1] + (month == 2 && leap ? 1 : 0);
   unsigned long lastDayAbs = days + lastDay - 1;
-  int dow = (lastDayAbs + 4) % 7; // 0=Sun, 1=Mon, …
+  int dow = (lastDayAbs + 4) % 7;
   unsigned long lastSunday = lastDayAbs - dow;
 
-  return lastSunday * 86400UL + 3600UL; // 01:00 UTC
+  return lastSunday * 86400UL + 3600UL;
 }
 
 int getItalyUTCOffset(unsigned long epochUTC) {
-  // Approximate year (corrected below if needed)
   int year = 1970;
   unsigned long rem = epochUTC;
   while (true) {
@@ -34,8 +32,8 @@ int getItalyUTCOffset(unsigned long epochUTC) {
     year++;
   }
 
-  unsigned long dstStart = lastSundayEpoch(year, 3);  // last Sun March  01:00 UTC
-  unsigned long dstEnd   = lastSundayEpoch(year, 10); // last Sun October 01:00 UTC
+  unsigned long dstStart = lastSundayEpoch(year, 3);
+  unsigned long dstEnd   = lastSundayEpoch(year, 10);
 
   return (epochUTC >= dstStart && epochUTC < dstEnd) ? 7200 : 3600;
 }

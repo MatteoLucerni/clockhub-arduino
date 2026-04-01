@@ -5,17 +5,11 @@
 #include "storage.h"
 #include <Arduino.h>
 
-// ─── Rate limiting ────────────────────────────────────────────────────────────
-
 static int pinFailCount = 0;
 static unsigned long pinFirstFailTime = 0;
 static const int PIN_MAX_ATTEMPTS = 5;
-static const unsigned long PIN_LOCKOUT_MS = 300000UL; // 5 minutes
+static const unsigned long PIN_LOCKOUT_MS = 300000UL;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-// Extracts value of "key" from a query string.
-// Reads until 'terminator' or space. Returns "" if key not found.
 static String parseParam(const String& req, const String& key, char terminator = '&') {
   int idx = req.indexOf(key);
   if (idx < 0) return "";
@@ -26,7 +20,6 @@ static String parseParam(const String& req, const String& key, char terminator =
   return req.substring(start, end);
 }
 
-// Renders a form submit button, disabled (grey) when schedule is locked.
 static void lockedButton(WiFiClient& client, const String& label, bool scheduleLocked) {
   if (scheduleLocked) {
     client.println("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" disabled>" + label + "</button>");
@@ -34,8 +27,6 @@ static void lockedButton(WiFiClient& client, const String& label, bool scheduleL
     client.println("<button type=\"submit\" class=\"btn btn-save\">" + label + "</button>");
   }
 }
-
-// ─── PIN page ─────────────────────────────────────────────────────────────────
 
 static void servePinPage(WiFiClient& client, const String& errorMsg = "", bool locked = false) {
   client.println("HTTP/1.1 200 OK");
@@ -76,8 +67,6 @@ static void servePinPage(WiFiClient& client, const String& errorMsg = "", bool l
   client.println("</div></body></html>");
 }
 
-// ─── Route handlers (side-effects only, no response) ─────────────────────────
-
 static void handleRoutes(const String& request) {
   if (request.indexOf("GET /TOGGLE") >= 0) {
     manualOverride = !manualOverride;
@@ -116,23 +105,23 @@ static void handleRoutes(const String& request) {
   }
   else if (request.indexOf("GET /SET_SCHEDULE") >= 0) {
     if (!isScheduleLocked()) {
+      int getLineEnd = request.indexOf('\n');
+      String getLine = (getLineEnd > 0) ? request.substring(0, getLineEnd) : request;
       for (int i = 0; i < 7; i++) {
         String hK = "h" + String(i) + "=";
         String mK = "m" + String(i) + "=";
         String aK = "a" + String(i) + "=";
-        String hVal = parseParam(request, hK);
-        String mVal = parseParam(request, mK);
+        String hVal = parseParam(getLine, hK);
+        String mVal = parseParam(getLine, mK);
         if (hVal.length() > 0) sysConfig.schedule[i].hour   = hVal.toInt();
         if (mVal.length() > 0) sysConfig.schedule[i].minute = mVal.toInt();
-        sysConfig.schedule[i].active = (request.indexOf(aK) > 0);
+        sysConfig.schedule[i].active = (getLine.indexOf(aK) >= 0);
       }
       saveConfig();
       scheduleErrorMsg = "";
     }
   }
 }
-
-// ─── Dashboard card renderers ─────────────────────────────────────────────────
 
 static void renderScheduleCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
@@ -212,8 +201,6 @@ static void renderStatusCard(WiFiClient& client, const String& pinParam) {
     + "</button></a></div></body></html>");
 }
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
-
 static void renderDashboard(WiFiClient& client, const String& hp, const String& pinParam, bool scheduleLocked) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-type:text/html");
@@ -248,8 +235,6 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   renderStatusCard(client, pinParam);
 }
 
-// ─── Public entry point ───────────────────────────────────────────────────────
-
 void handleWebRequest() {
   WiFiClient client = server.available();
   if (!client) return;
@@ -281,7 +266,6 @@ void handleWebRequest() {
           if (!isPinValid && request.indexOf("GET /CHECK_LOCK") < 0) {
             bool hasPin = (request.indexOf("pin=") >= 0);
 
-            // Reset lockout after 5 minutes
             if (pinFailCount > 0 && (millis() - pinFirstFailTime) >= PIN_LOCKOUT_MS) {
               pinFailCount = 0;
             }
@@ -304,7 +288,6 @@ void handleWebRequest() {
             break;
           }
 
-          // Valid PIN — reset fail counter
           pinFailCount = 0;
 
           String pinParam = "pin=" + String(access_pin);
