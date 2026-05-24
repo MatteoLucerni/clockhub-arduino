@@ -39,7 +39,7 @@ static void servePinPage(WiFiClient& client, const String& errorMsg = "", bool l
   if (errorMsg.length() > 0) {
     client.println("<div class=\"error\">" + errorMsg + "</div>");
   } else {
-    client.println("<p style=\"color:#888;font-size:0.9rem;margin-bottom:15px\">Inserisci il PIN per accedere</p>");
+    client.println("<p style=\"color:#888;font-size:0.9rem;margin-bottom:15px\">Enter PIN to access</p>");
   }
   if (!locked) {
     client.println("<form id=\"pinForm\" action=\"/\" method=\"GET\">");
@@ -216,30 +216,30 @@ static void renderSleepCard(WiFiClient& client, const String& hp) {
 static void renderBlindCard(WiFiClient& client, const String& pinParam) {
   String stateLabel, stateColor;
   if (blindManualActive && blindManualDirection == 1) {
-    stateLabel = "APERTURA IN CORSO"; stateColor = "#34c759";
+    stateLabel = "OPENING"; stateColor = "#34c759";
   } else if (blindManualActive && blindManualDirection == -1) {
-    stateLabel = "CHIUSURA IN CORSO"; stateColor = "#ff9500";
+    stateLabel = "CLOSING"; stateColor = "#ff9500";
   } else {
-    stateLabel = "FERMO"; stateColor = "#8e8e93";
+    stateLabel = "IDLE"; stateColor = "#8e8e93";
   }
 
-  client.println("<div class=\"card\"><h2>Tapparella</h2>");
+  client.println("<div class=\"card\"><h2>Blind</h2>");
   client.println("<p style=\"font-weight:bold;color:" + stateColor + "\">" + stateLabel + "</p>");
   client.println("<div style=\"display:flex;gap:8px;margin-top:8px\">");
-  client.println("<a href=\"/BLIND_OPEN?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#34c759;color:white;margin:0\">APRI</button></a>");
-  client.println("<a href=\"/BLIND_CLOSE?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#ff9500;color:white;margin:0\">CHIUDI</button></a>");
+  client.println("<a href=\"/BLIND_OPEN?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#34c759;color:white;margin:0\">OPEN</button></a>");
+  client.println("<a href=\"/BLIND_CLOSE?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#ff9500;color:white;margin:0\">CLOSE</button></a>");
   client.println("<a href=\"/BLIND_STOP?" + pinParam + "\" style=\"flex:1\"><button class=\"btn btn-stop\" style=\"margin:0\">STOP</button></a>");
   client.println("</div></div>");
 }
 
 static void renderBlindSettingsCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
-  client.println("<div class=\"card\"><h2>Impostazioni Tapparella</h2>");
+  client.println("<div class=\"card\"><h2>Blind Settings</h2>");
   client.println("<form action=\"/SET_BLIND_CONFIG\" method=\"GET\">" + hp);
-  client.println("<div class=\"row\"><span>Anticipo apertura (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
-  client.println("<div class=\"row\"><span>Durata apertura (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
-  client.println("<div class=\"row\"><span>Durata chiusura (sec)</span><input type=\"number\" name=\"bclose\" value=\"" + String(sysConfig.blindCloseDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
-  lockedButton(client, "SALVA TAPPARELLA", scheduleLocked);
+  client.println("<div class=\"row\"><span>Open Lead Time (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>Open Duration (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>Close Duration (sec)</span><input type=\"number\" name=\"bclose\" value=\"" + String(sysConfig.blindCloseDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
+  lockedButton(client, "SAVE BLIND SETTINGS", scheduleLocked);
   client.println("</form></div>");
 }
 
@@ -328,15 +328,15 @@ void handleWebRequest() {
 
             if (pinFailCount >= PIN_MAX_ATTEMPTS) {
               int minsLeft = (int)((PIN_LOCKOUT_MS - (millis() - pinFirstFailTime)) / 60000) + 1;
-              servePinPage(client, "Troppi tentativi. Riprova tra " + String(minsLeft) + " min.", true);
+              servePinPage(client, "Too many attempts. Try again in " + String(minsLeft) + " min.", true);
             } else if (hasPin) {
               if (pinFailCount == 0) pinFirstFailTime = millis();
               pinFailCount++;
               int remaining = PIN_MAX_ATTEMPTS - pinFailCount;
               if (remaining > 0) {
-                servePinPage(client, "PIN non corretto. Tentativi rimanenti: " + String(remaining));
+                servePinPage(client, "Incorrect PIN. Remaining attempts: " + String(remaining));
               } else {
-                servePinPage(client, "Troppi tentativi. Riprova tra 5 min.", true);
+                servePinPage(client, "Too many attempts. Try again in 5 min.", true);
               }
             } else {
               servePinPage(client);
