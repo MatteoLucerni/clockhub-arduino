@@ -83,8 +83,9 @@ static void handleRoutes(const String& request) {
   }
   else if (request.indexOf("GET /SET_LIGHT_CONFIG") >= 0) {
     if (!isScheduleLocked()) {
-      String leadVal = parseParam(request, "lead=", ' ');
+      String leadVal = parseParam(request, "lead=");
       if (leadVal.length() > 0) sysConfig.lightLeadMinutes = leadVal.toInt();
+      sysConfig.lightEnabled = (request.indexOf("len=") > 0);
       saveConfig();
       scheduleErrorMsg = "";
     }
@@ -97,6 +98,7 @@ static void handleRoutes(const String& request) {
       if (bldLead.length() > 0)  sysConfig.blindLeadMinutes  = bldLead.toInt();
       if (bldOpen.length() > 0)  sysConfig.blindOpenDuration  = bldOpen.toInt();
       if (bldClose.length() > 0) sysConfig.blindCloseDuration = bldClose.toInt();
+      sysConfig.blindEnabled = (request.indexOf("ben=") > 0);
       saveConfig();
       scheduleErrorMsg = "";
     }
@@ -176,6 +178,7 @@ static void renderLightCard(WiFiClient& client, const String& hp, bool scheduleL
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Light Settings</h2>");
   client.println("<form action=\"/SET_LIGHT_CONFIG\" method=\"GET\">" + hp
+    + "<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"len\" " + String(sysConfig.lightEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>"
     + "<div class=\"row\"><span>Lead Time (minutes)</span><input type=\"number\" name=\"lead\" value=\"" + String(sysConfig.lightLeadMinutes) + "\"" + disabledAttr + "></div>");
   lockedButton(client, "UPDATE LIGHT CONFIG", scheduleLocked);
   client.println("</form></div>");
@@ -236,6 +239,7 @@ static void renderBlindSettingsCard(WiFiClient& client, const String& hp, bool s
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Blind Settings</h2>");
   client.println("<form action=\"/SET_BLIND_CONFIG\" method=\"GET\">" + hp);
+  client.println("<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"ben\" " + String(sysConfig.blindEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Open Lead Time (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Open Duration (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Close Duration (sec)</span><input type=\"number\" name=\"bclose\" value=\"" + String(sysConfig.blindCloseDuration) + "\" min=\"1\"" + disabledAttr + "></div>");

@@ -15,9 +15,11 @@ struct DaySetting {
 struct Config {
   bool globalEnabled;
   int runDuration;
+  bool lightEnabled;
   int lightLeadMinutes;
   int fallingAsleepMinutes;
   DaySetting schedule[7];
+  bool blindEnabled;
   int blindLeadMinutes;
   int blindOpenDuration;
   int blindCloseDuration;

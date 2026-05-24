@@ -87,13 +87,13 @@ void runAlarmLogic() {
 
     if (sysConfig.globalEnabled) {
       // Trigger light (VoiceMonkey)
-      if (sysConfig.schedule[lgtDay].active && curTotal == lgtTotal && !lightTriggered) {
+      if (sysConfig.lightEnabled && sysConfig.schedule[lgtDay].active && curTotal == lgtTotal && !lightTriggered) {
         triggerVoiceMonkey();
         lightTriggered = true;
       }
 
       // Trigger blind opening
-      if (!blindManualActive && sysConfig.schedule[bldDay].active && curTotal == bldTotal && !blindTriggered) {
+      if (sysConfig.blindEnabled && !blindManualActive && sysConfig.schedule[bldDay].active && curTotal == bldTotal && !blindTriggered) {
         setMotor(1);
         delay(sysConfig.blindOpenDuration * 1000);
         setMotor(0);
