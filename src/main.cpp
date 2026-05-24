@@ -28,6 +28,9 @@ bool   alarmTriggered = false;
 bool   lightTriggered = false;
 bool   manualOverride = false;
 String scheduleErrorMsg = "";
+bool   blindTriggered = false;
+bool   blindManualActive = false;
+int    blindManualDirection = 0;
 
 int  targetWakeH = 8;
 int  targetWakeM = 30;
@@ -44,6 +47,12 @@ void setup() {
   Serial.begin(115200);
   pinMode(PUMP_PIN, OUTPUT);
   digitalWrite(PUMP_PIN, LOW);
+  pinMode(MOTOR_ENA, OUTPUT);
+  pinMode(MOTOR_IN1, OUTPUT);
+  pinMode(MOTOR_IN2, OUTPUT);
+  digitalWrite(MOTOR_ENA, LOW);
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, LOW);
   loadConfig();
   setupWiFi();
   updateDuckDNS();

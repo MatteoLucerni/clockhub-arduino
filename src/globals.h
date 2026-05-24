@@ -25,6 +25,9 @@ extern bool alarmTriggered;
 extern bool lightTriggered;
 extern bool manualOverride;
 extern String scheduleErrorMsg;
+extern bool blindTriggered;
+extern bool blindManualActive;
+extern int  blindManualDirection;
 
 // Sleep calculator state
 extern int targetWakeH;

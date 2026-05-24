@@ -89,6 +89,30 @@ static void handleRoutes(const String& request) {
       scheduleErrorMsg = "";
     }
   }
+  else if (request.indexOf("GET /SET_BLIND_CONFIG") >= 0) {
+    if (!isScheduleLocked()) {
+      String bldLead = parseParam(request, "blead=");
+      String bldOpen = parseParam(request, "bopen=");
+      String bldClose = parseParam(request, "bclose=", ' ');
+      if (bldLead.length() > 0)  sysConfig.blindLeadMinutes  = bldLead.toInt();
+      if (bldOpen.length() > 0)  sysConfig.blindOpenDuration  = bldOpen.toInt();
+      if (bldClose.length() > 0) sysConfig.blindCloseDuration = bldClose.toInt();
+      saveConfig();
+      scheduleErrorMsg = "";
+    }
+  }
+  else if (request.indexOf("GET /BLIND_OPEN") >= 0) {
+    blindManualActive    = true;
+    blindManualDirection = 1;
+  }
+  else if (request.indexOf("GET /BLIND_CLOSE") >= 0) {
+    blindManualActive    = true;
+    blindManualDirection = -1;
+  }
+  else if (request.indexOf("GET /BLIND_STOP") >= 0) {
+    blindManualActive    = false;
+    blindManualDirection = 0;
+  }
   else if (request.indexOf("GET /SET_SLEEP_DELAY") >= 0) {
     String sldVal = parseParam(request, "sld=", ' ');
     if (sldVal.length() > 0) sysConfig.fallingAsleepMinutes = sldVal.toInt();
@@ -189,6 +213,36 @@ static void renderSleepCard(WiFiClient& client, const String& hp) {
   client.println("</div>");
 }
 
+static void renderBlindCard(WiFiClient& client, const String& pinParam) {
+  String stateLabel, stateColor;
+  if (blindManualActive && blindManualDirection == 1) {
+    stateLabel = "APERTURA IN CORSO"; stateColor = "#34c759";
+  } else if (blindManualActive && blindManualDirection == -1) {
+    stateLabel = "CHIUSURA IN CORSO"; stateColor = "#ff9500";
+  } else {
+    stateLabel = "FERMO"; stateColor = "#8e8e93";
+  }
+
+  client.println("<div class=\"card\"><h2>Tapparella</h2>");
+  client.println("<p style=\"font-weight:bold;color:" + stateColor + "\">" + stateLabel + "</p>");
+  client.println("<div style=\"display:flex;gap:8px;margin-top:8px\">");
+  client.println("<a href=\"/BLIND_OPEN?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#34c759;color:white;margin:0\">APRI</button></a>");
+  client.println("<a href=\"/BLIND_CLOSE?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#ff9500;color:white;margin:0\">CHIUDI</button></a>");
+  client.println("<a href=\"/BLIND_STOP?" + pinParam + "\" style=\"flex:1\"><button class=\"btn btn-stop\" style=\"margin:0\">STOP</button></a>");
+  client.println("</div></div>");
+}
+
+static void renderBlindSettingsCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+  String disabledAttr = scheduleLocked ? " disabled" : "";
+  client.println("<div class=\"card\"><h2>Impostazioni Tapparella</h2>");
+  client.println("<form action=\"/SET_BLIND_CONFIG\" method=\"GET\">" + hp);
+  client.println("<div class=\"row\"><span>Anticipo apertura (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>Durata apertura (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>Durata chiusura (sec)</span><input type=\"number\" name=\"bclose\" value=\"" + String(sysConfig.blindCloseDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
+  lockedButton(client, "SALVA TAPPARELLA", scheduleLocked);
+  client.println("</form></div>");
+}
+
 static void renderStatusCard(WiFiClient& client, const String& pinParam) {
   client.print("<div class=\"card\"><h2>Status</h2>"
     + String("<p>") + daysOfWeek[timeClient.getDay()] + ", " + timeClient.getFormattedTime() + "</p>"
@@ -231,7 +285,9 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   renderScheduleCard(client, hp, scheduleLocked);
   renderSettingsCard(client, hp, scheduleLocked);
   renderLightCard(client, hp, scheduleLocked);
+  renderBlindSettingsCard(client, hp, scheduleLocked);
   renderSleepCard(client, hp);
+  renderBlindCard(client, pinParam);
   renderStatusCard(client, pinParam);
 }
 

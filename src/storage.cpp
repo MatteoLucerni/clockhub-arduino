@@ -4,12 +4,15 @@
 
 void loadConfig() {
   EEPROM.get(0, sysConfig);
-  if (sysConfig.checkKey != 12345) {
+  if (sysConfig.checkKey != 12346) {
     sysConfig.globalEnabled = true;
     sysConfig.runDuration = 10;
     sysConfig.lightLeadMinutes = 30;
     sysConfig.fallingAsleepMinutes = 15;
-    sysConfig.checkKey = 12345;
+    sysConfig.blindLeadMinutes = 5;
+    sysConfig.blindOpenDuration = 55;
+    sysConfig.blindCloseDuration = 55;
+    sysConfig.checkKey = 12346;
     for (int i = 0; i < 7; i++) {
       sysConfig.schedule[i] = {false, 7, 30};
     }
