@@ -23,19 +23,21 @@ static void setMotor(int direction, uint8_t power = 255) {
 }
 
 // Returns PWM (0-255) for the current moment in a timed run.
-// Slowdown threshold is always the last 20% of fullMs (the complete open/close duration),
+// Slowdown threshold is always the last 30% of fullMs (the complete open/close duration),
 // regardless of how short the actual run is (e.g. partial travel from mid-position).
 static uint8_t calcMotorPWM(unsigned long elapsed, unsigned long runMs, unsigned long fullMs) {
   if (runMs == 0 || elapsed >= runMs) return 0;
   unsigned long timeFromEnd = runMs - elapsed;
-  unsigned long slowdownMs  = fullMs / 5;   // 20% of full duration
-  unsigned long segMs       = fullMs / 20;  // 5% of full duration per segment
+  unsigned long slowdownMs  = fullMs * 3 / 10;  // 30% of full duration
+  unsigned long segMs       = fullMs / 20;       // 5% of full duration per segment
   if (segMs == 0 || timeFromEnd > slowdownMs) return 255;
   uint8_t seg;
-  if      (timeFromEnd < segMs)         seg = 3;
-  else if (timeFromEnd < segMs * 2UL)   seg = 2;
-  else if (timeFromEnd < segMs * 3UL)   seg = 1;
-  else                                  seg = 0;
+  if      (timeFromEnd < segMs)         seg = 5;  // 95-100%
+  else if (timeFromEnd < segMs * 2UL)   seg = 4;  // 90-95%
+  else if (timeFromEnd < segMs * 3UL)   seg = 3;  // 85-90%
+  else if (timeFromEnd < segMs * 4UL)   seg = 2;  // 80-85%
+  else if (timeFromEnd < segMs * 5UL)   seg = 1;  // 75-80%
+  else                                  seg = 0;  // 70-75%
   return (uint8_t)((uint32_t)sysConfig.motorSlowdown[seg] * 255 / 100);
 }
 

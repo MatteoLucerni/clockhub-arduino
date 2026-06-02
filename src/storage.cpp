@@ -8,7 +8,7 @@ static const int BLIND_POS_CHECK_KEY = 54321;
 
 void loadConfig() {
   EEPROM.get(0, sysConfig);
-  if (sysConfig.checkKey != 12351) {
+  if (sysConfig.checkKey != 12352) {
     sysConfig.globalEnabled = true;
     sysConfig.runDuration = 10;
     sysConfig.lightEnabled = true;
@@ -18,10 +18,10 @@ void loadConfig() {
     sysConfig.blindLeadMinutes = 5;
     sysConfig.blindOpenDuration = 145;
     sysConfig.blindCloseDuration = 145;
-    // Last 20% slowdown: power at 80%, 85%, 90%, 95% of run
-    uint8_t defaultSlowdown[4] = {80, 60, 40, 20};
-    for (int i = 0; i < 4; i++) sysConfig.motorSlowdown[i] = defaultSlowdown[i];
-    sysConfig.checkKey = 12351;
+    // Last 30% slowdown: power at 70%, 75%, 80%, 85%, 90%, 95% of run
+    uint8_t defaultSlowdown[6] = {80, 75, 70, 60, 40, 25};
+    for (int i = 0; i < 6; i++) sysConfig.motorSlowdown[i] = defaultSlowdown[i];
+    sysConfig.checkKey = 12352;
     // Sun/Sat 11:00, Mon–Fri 08:30, all active
     for (int i = 0; i < 7; i++) {
       bool isWeekend = (i == 0 || i == 6);

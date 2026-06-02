@@ -24,6 +24,6 @@ struct Config {
   int blindLeadMinutes;
   int blindOpenDuration;
   int blindCloseDuration;
-  uint8_t motorSlowdown[4];
+  uint8_t motorSlowdown[6];
   int checkKey;
 };

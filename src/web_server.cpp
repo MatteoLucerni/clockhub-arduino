@@ -99,7 +99,7 @@ static void handleRoutes(const String& request) {
       if (bldOpen.length() > 0)  sysConfig.blindOpenDuration  = bldOpen.toInt();
       if (bldClose.length() > 0) sysConfig.blindCloseDuration = bldClose.toInt();
       sysConfig.blindEnabled = (request.indexOf("ben=") > 0);
-      for (int i = 0; i < 4; i++) {
+      for (int i = 0; i < 6; i++) {
         String pVal = parseParam(request, "p" + String(i) + "=");
         if (pVal.length() > 0) sysConfig.motorSlowdown[i] = (uint8_t)constrain(pVal.toInt(), 0, 100);
       }
@@ -275,10 +275,10 @@ static void renderBlindSettingsCard(WiFiClient& client, const String& hp, bool s
   client.println("<div class=\"row\"><span>Open Lead Time (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Open Duration (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Close Duration (sec)</span><input type=\"number\" name=\"bclose\" value=\"" + String(sysConfig.blindCloseDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
-  client.println("<h3>End-of-run Slowdown (last 20%)</h3>");
-  client.println("<p style=\"font-size:0.75rem;color:#999;text-align:left;margin:2px 0 10px\">First 80% always at full power &mdash; applies to scheduled runs</p>");
-  const char* pctLabels[4] = {"80%", "85%", "90%", "95%"};
-  for (int i = 0; i < 4; i++) {
+  client.println("<h3>End-of-run Slowdown (last 30%)</h3>");
+  client.println("<p style=\"font-size:0.75rem;color:#999;text-align:left;margin:2px 0 10px\">First 70% always at full power &mdash; applies to scheduled runs</p>");
+  const char* pctLabels[6] = {"70%", "75%", "80%", "85%", "90%", "95%"};
+  for (int i = 0; i < 6; i++) {
     String val = String(sysConfig.motorSlowdown[i]);
     String iStr = String(i);
     client.println(
