@@ -4,19 +4,24 @@
 
 void loadConfig() {
   EEPROM.get(0, sysConfig);
-  if (sysConfig.checkKey != 12347) {
+  if (sysConfig.checkKey != 12351) {
     sysConfig.globalEnabled = true;
     sysConfig.runDuration = 10;
     sysConfig.lightEnabled = true;
-    sysConfig.lightLeadMinutes = 30;
+    sysConfig.lightLeadMinutes = 5;
     sysConfig.fallingAsleepMinutes = 15;
     sysConfig.blindEnabled = true;
     sysConfig.blindLeadMinutes = 5;
-    sysConfig.blindOpenDuration = 55;
-    sysConfig.blindCloseDuration = 55;
-    sysConfig.checkKey = 12347;
+    sysConfig.blindOpenDuration = 145;
+    sysConfig.blindCloseDuration = 145;
+    // Last 20% slowdown: power at 80%, 85%, 90%, 95% of run
+    uint8_t defaultSlowdown[4] = {80, 60, 40, 20};
+    for (int i = 0; i < 4; i++) sysConfig.motorSlowdown[i] = defaultSlowdown[i];
+    sysConfig.checkKey = 12351;
+    // Sun/Sat 11:00, Mon–Fri 08:30, all active
     for (int i = 0; i < 7; i++) {
-      sysConfig.schedule[i] = {false, 7, 30};
+      bool isWeekend = (i == 0 || i == 6);
+      sysConfig.schedule[i] = {true, isWeekend ? 11 : 8, isWeekend ? 0 : 30};
     }
     EEPROM.put(0, sysConfig);
   }

@@ -31,6 +31,8 @@ String scheduleErrorMsg = "";
 bool   blindTriggered = false;
 bool   blindManualActive = false;
 int    blindManualDirection = 0;
+unsigned long blindRunStartMs = 0;
+unsigned long blindRunTotalMs = 0;
 
 int  targetWakeH = 8;
 int  targetWakeM = 30;

@@ -28,6 +28,8 @@ extern String scheduleErrorMsg;
 extern bool blindTriggered;
 extern bool blindManualActive;
 extern int  blindManualDirection;
+extern unsigned long blindRunStartMs;
+extern unsigned long blindRunTotalMs;
 
 // Sleep calculator state
 extern int targetWakeH;

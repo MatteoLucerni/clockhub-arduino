@@ -94,11 +94,15 @@ static void handleRoutes(const String& request) {
     if (!isScheduleLocked()) {
       String bldLead = parseParam(request, "blead=");
       String bldOpen = parseParam(request, "bopen=");
-      String bldClose = parseParam(request, "bclose=", ' ');
-      if (bldLead.length() > 0)  sysConfig.blindLeadMinutes  = bldLead.toInt();
+      String bldClose = parseParam(request, "bclose=");
+      if (bldLead.length() > 0)  sysConfig.blindLeadMinutes   = bldLead.toInt();
       if (bldOpen.length() > 0)  sysConfig.blindOpenDuration  = bldOpen.toInt();
       if (bldClose.length() > 0) sysConfig.blindCloseDuration = bldClose.toInt();
       sysConfig.blindEnabled = (request.indexOf("ben=") > 0);
+      for (int i = 0; i < 4; i++) {
+        String pVal = parseParam(request, "p" + String(i) + "=");
+        if (pVal.length() > 0) sysConfig.motorSlowdown[i] = (uint8_t)constrain(pVal.toInt(), 0, 100);
+      }
       saveConfig();
       scheduleErrorMsg = "";
     }
@@ -106,10 +110,14 @@ static void handleRoutes(const String& request) {
   else if (request.indexOf("GET /BLIND_OPEN") >= 0) {
     blindManualActive    = true;
     blindManualDirection = 1;
+    blindRunStartMs      = millis();
+    blindRunTotalMs      = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
   }
   else if (request.indexOf("GET /BLIND_CLOSE") >= 0) {
     blindManualActive    = true;
     blindManualDirection = -1;
+    blindRunStartMs      = millis();
+    blindRunTotalMs      = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
   }
   else if (request.indexOf("GET /BLIND_STOP") >= 0) {
     blindManualActive    = false;
@@ -243,6 +251,23 @@ static void renderBlindSettingsCard(WiFiClient& client, const String& hp, bool s
   client.println("<div class=\"row\"><span>Open Lead Time (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Open Duration (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Close Duration (sec)</span><input type=\"number\" name=\"bclose\" value=\"" + String(sysConfig.blindCloseDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
+  client.println("<h3>End-of-run Slowdown (last 20%)</h3>");
+  client.println("<p style=\"font-size:0.75rem;color:#999;text-align:left;margin:2px 0 10px\">First 80% always at full power &mdash; applies to scheduled runs</p>");
+  const char* pctLabels[4] = {"80%", "85%", "90%", "95%"};
+  for (int i = 0; i < 4; i++) {
+    String val = String(sysConfig.motorSlowdown[i]);
+    String iStr = String(i);
+    client.println(
+      "<div class=\"prow\">"
+      "<span class=\"plbl\">" + String(pctLabels[i]) + "</span>"
+      + "<input type=\"range\" name=\"p" + iStr + "\" min=\"0\" max=\"100\" value=\"" + val + "\""
+      + disabledAttr
+      + " oninput=\"document.getElementById('pv" + iStr + "').textContent=this.value+'%'\">"
+      + "<span class=\"pval\" id=\"pv" + iStr + "\">" + val + "%</span>"
+      + "</div>"
+    );
+  }
+  client.println("<p style=\"font-size:0.72rem;color:#bbb;text-align:right;margin:4px 0 0\">At 100%: motor stops</p>");
   lockedButton(client, "SAVE BLIND SETTINGS", scheduleLocked);
   client.println("</form></div>");
 }
@@ -267,7 +292,7 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   client.println();
   client.println("<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
   client.println("<style>");
-  client.println("body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:10px;background-color:#efeff4;color:#333;}.card{background:white;padding:15px;margin:15px auto;max-width:500px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.1rem;margin-top:0;color:#666;border-bottom:1px solid #eee;padding-bottom:8px;text-transform:uppercase;}h3{font-size:0.9rem;color:#888;margin:15px 0 5px 0;text-align:left;border-left:3px solid #007aff;padding-left:8px;}.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}input[type=number]{padding:8px;width:50px;text-align:center;font-size:16px;border:1px solid #ccc;border-radius:6px;}.btn{width:100%;padding:15px;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:10px;}.btn-save{background-color:#007aff;color:white;}.btn-manual{background-color:#ff3b30;color:white;}.btn-stop{background-color:#8e8e93;color:white;}.cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}.cycle-item{background:#f8f8f8;padding:10px;border-radius:8px;font-size:0.85rem;}.cycle-time{font-weight:bold;color:#007aff;display:block;font-size:1.1rem;}.calc-row{display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:10px 0;}.error-msg{background:#ff3b30;color:white;padding:12px;border-radius:8px;margin:15px auto;max-width:500px;font-weight:bold;}");
+  client.println("body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:10px;background-color:#efeff4;color:#333;}.card{background:white;padding:15px;margin:15px auto;max-width:500px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.1rem;margin-top:0;color:#666;border-bottom:1px solid #eee;padding-bottom:8px;text-transform:uppercase;}h3{font-size:0.9rem;color:#888;margin:15px 0 5px 0;text-align:left;border-left:3px solid #007aff;padding-left:8px;}.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}input[type=number]{padding:8px;width:50px;text-align:center;font-size:16px;border:1px solid #ccc;border-radius:6px;}.btn{width:100%;padding:15px;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:10px;}.btn-save{background-color:#007aff;color:white;}.btn-manual{background-color:#ff3b30;color:white;}.btn-stop{background-color:#8e8e93;color:white;}.cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}.cycle-item{background:#f8f8f8;padding:10px;border-radius:8px;font-size:0.85rem;}.cycle-time{font-weight:bold;color:#007aff;display:block;font-size:1.1rem;}.calc-row{display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:10px 0;}.error-msg{background:#ff3b30;color:white;padding:12px;border-radius:8px;margin:15px auto;max-width:500px;font-weight:bold;}.prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;}.plbl{width:36px;font-size:0.82rem;color:#666;text-align:right;flex-shrink:0;}.prow input[type=range]{flex:1;min-width:0;height:28px;cursor:pointer;}.pval{width:38px;font-size:0.9rem;font-weight:bold;color:#007aff;text-align:right;flex-shrink:0;}");
   client.println("</style>");
 
   client.println("<script>");

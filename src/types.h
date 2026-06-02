@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 const int PUMP_PIN = 7;
 const int MOTOR_ENA = 9;
@@ -23,5 +24,6 @@ struct Config {
   int blindLeadMinutes;
   int blindOpenDuration;
   int blindCloseDuration;
+  uint8_t motorSlowdown[4];
   int checkKey;
 };

@@ -4,20 +4,32 @@
 #include <Arduino.h>
 
 // direction: 1 = open (backward), -1 = close (forward), 0 = stop
-static void setMotor(int direction) {
+// power: 0-255 PWM value
+static void setMotor(int direction, uint8_t power = 255) {
   if (direction == 1) {
     digitalWrite(MOTOR_IN1, LOW);
     digitalWrite(MOTOR_IN2, HIGH);
-    digitalWrite(MOTOR_ENA, HIGH);
+    analogWrite(MOTOR_ENA, power);
   } else if (direction == -1) {
     digitalWrite(MOTOR_IN1, HIGH);
     digitalWrite(MOTOR_IN2, LOW);
-    digitalWrite(MOTOR_ENA, HIGH);
+    analogWrite(MOTOR_ENA, power);
   } else {
-    digitalWrite(MOTOR_ENA, LOW);
+    analogWrite(MOTOR_ENA, 0);
     digitalWrite(MOTOR_IN1, LOW);
     digitalWrite(MOTOR_IN2, LOW);
   }
+}
+
+// Returns PWM (0-255) for the current moment in a timed run.
+// First 80%: full power. Last 20%: 4 slowdown sub-segments of 5% each.
+static uint8_t calcMotorPWM(unsigned long elapsed, unsigned long total) {
+  if (total == 0 || elapsed >= total) return 0;
+  unsigned long pct = elapsed * 100UL / total; // 0..99
+  if (pct < 80) return 255;
+  uint8_t seg = (uint8_t)((pct - 80) / 5); // 0..3
+  if (seg > 3) seg = 3;
+  return (uint8_t)((uint32_t)sysConfig.motorSlowdown[seg] * 255 / 100);
 }
 
 bool isScheduleLocked() {
@@ -51,9 +63,16 @@ bool isScheduleLocked() {
 }
 
 void runAlarmLogic() {
-  // Manual blind override takes priority
+  // Non-blocking blind motor state machine
   if (blindManualActive) {
-    setMotor(blindManualDirection);
+    unsigned long elapsed = millis() - blindRunStartMs;
+    if (elapsed >= blindRunTotalMs) {
+      setMotor(0);
+      blindManualActive    = false;
+      blindManualDirection = 0;
+    } else {
+      setMotor(blindManualDirection, calcMotorPWM(elapsed, blindRunTotalMs));
+    }
   } else {
     setMotor(0);
   }
@@ -92,12 +111,13 @@ void runAlarmLogic() {
         lightTriggered = true;
       }
 
-      // Trigger blind opening
+      // Trigger blind opening (non-blocking: start the state machine)
       if (sysConfig.blindEnabled && !blindManualActive && sysConfig.schedule[bldDay].active && curTotal == bldTotal && !blindTriggered) {
-        setMotor(1);
-        delay(sysConfig.blindOpenDuration * 1000);
-        setMotor(0);
-        blindTriggered = true;
+        blindManualActive    = true;
+        blindManualDirection = 1;
+        blindRunStartMs      = millis();
+        blindRunTotalMs      = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
+        blindTriggered       = true;
       }
 
       // Trigger pump (water alarm)
