@@ -15,6 +15,7 @@ const char ssid[]       = WIFI_SSID;
 const char pass[]       = WIFI_PASS;
 const char* api_token   = API_TOKEN;
 const char* monkey_id   = MONKEY_ID;
+const char* speaker_id  = SPEAKER_ID;
 const char* duck_token  = DUCK_TOKEN;
 const char* duck_domain = DUCK_DOMAIN;
 const char* access_pin  = ACCESS_PIN;
@@ -28,6 +29,7 @@ bool   alarmTriggered = false;
 bool   lightTriggered = false;
 bool   manualOverride = false;
 String scheduleErrorMsg = "";
+String pendingAnnounceMsg = "";
 bool   blindTriggered = false;
 bool   blindManualActive = false;
 int    blindManualDirection = 0;
@@ -72,5 +74,9 @@ void loop() {
   timeClient.setTimeOffset(currentUTCOffset);
   updateDuckDNSIfNeeded();
   handleWebRequest();
+  if (pendingAnnounceMsg.length() > 0) {
+    announceVoiceMonkey(pendingAnnounceMsg.c_str());
+    pendingAnnounceMsg = "";
+  }
   runAlarmLogic();
 }

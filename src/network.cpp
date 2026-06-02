@@ -29,6 +29,25 @@ void triggerVoiceMonkey() {
   }
 }
 
+void announceVoiceMonkey(const char* speech) {
+  if (!speaker_id || speaker_id[0] == '\0') return;
+  WiFiSSLClient client;
+  if (client.connect("api-v2.voicemonkey.io", 443)) {
+    String encoded = "";
+    for (int i = 0; speech[i]; i++)
+      encoded += (speech[i] == ' ') ? '+' : (char)speech[i];
+    String url = "/announcement?token=" + String(api_token)
+               + "&device=" + String(speaker_id)
+               + "&text=" + encoded;
+    client.println("GET " + url + " HTTP/1.1");
+    client.println("Host: api-v2.voicemonkey.io");
+    client.println("Connection: close");
+    client.println();
+    delay(500);
+    client.stop();
+  }
+}
+
 void setupWiFi() {
   IPAddress arduinoIP(ARDUINO_IP_ARGS);
   IPAddress dns(DNS_IP_ARGS);
