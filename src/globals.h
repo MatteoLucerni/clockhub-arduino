@@ -10,6 +10,7 @@ extern const char ssid[];
 extern const char pass[];
 extern const char* api_token;
 extern const char* monkey_id;
+extern const char* speaker_id;
 extern const char* duck_token;
 extern const char* duck_domain;
 extern const char* access_pin;
@@ -25,6 +26,15 @@ extern bool alarmTriggered;
 extern bool lightTriggered;
 extern bool manualOverride;
 extern String scheduleErrorMsg;
+extern String pendingAnnounceMsg;
+extern bool blindTriggered;
+extern bool blindManualActive;
+extern int  blindManualDirection;
+extern unsigned long blindRunStartMs;
+extern unsigned long blindRunTotalMs;
+extern unsigned long blindRunFullMs;
+extern int  blindRunStartPos;
+extern int  blindPositionPct;
 
 // Sleep calculator state
 extern int targetWakeH;

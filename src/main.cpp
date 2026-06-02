@@ -15,6 +15,7 @@ const char ssid[]       = WIFI_SSID;
 const char pass[]       = WIFI_PASS;
 const char* api_token   = API_TOKEN;
 const char* monkey_id   = MONKEY_ID;
+const char* speaker_id  = SPEAKER_ID;
 const char* duck_token  = DUCK_TOKEN;
 const char* duck_domain = DUCK_DOMAIN;
 const char* access_pin  = ACCESS_PIN;
@@ -28,6 +29,15 @@ bool   alarmTriggered = false;
 bool   lightTriggered = false;
 bool   manualOverride = false;
 String scheduleErrorMsg = "";
+String pendingAnnounceMsg = "";
+bool   blindTriggered = false;
+bool   blindManualActive = false;
+int    blindManualDirection = 0;
+unsigned long blindRunStartMs = 0;
+unsigned long blindRunTotalMs = 0;
+unsigned long blindRunFullMs  = 0;
+int    blindRunStartPos = 0;
+int    blindPositionPct = -1;
 
 int  targetWakeH = 8;
 int  targetWakeM = 30;
@@ -44,7 +54,14 @@ void setup() {
   Serial.begin(115200);
   pinMode(PUMP_PIN, OUTPUT);
   digitalWrite(PUMP_PIN, LOW);
+  pinMode(MOTOR_ENA, OUTPUT);
+  pinMode(MOTOR_IN1, OUTPUT);
+  pinMode(MOTOR_IN2, OUTPUT);
+  digitalWrite(MOTOR_ENA, LOW);
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, LOW);
   loadConfig();
+  loadBlindPosition();
   setupWiFi();
   updateDuckDNS();
   lastDuckDNSUpdate = millis();
@@ -57,5 +74,9 @@ void loop() {
   timeClient.setTimeOffset(currentUTCOffset);
   updateDuckDNSIfNeeded();
   handleWebRequest();
+  if (pendingAnnounceMsg.length() > 0) {
+    announceVoiceMonkey(pendingAnnounceMsg.c_str());
+    pendingAnnounceMsg = "";
+  }
   runAlarmLogic();
 }

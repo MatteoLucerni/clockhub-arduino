@@ -2,3 +2,4 @@
 
 bool isScheduleLocked();
 void runAlarmLogic();
+int  currentBlindPosition();

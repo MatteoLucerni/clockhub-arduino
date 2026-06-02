@@ -88,6 +88,7 @@ def generate_config(env_obj):
         "// VoiceMonkey API",
         '#define API_TOKEN     "{}"'.format(values["API_TOKEN"]),
         '#define MONKEY_ID     "{}"'.format(values["MONKEY_ID"]),
+        '#define SPEAKER_ID    "{}"'.format(values.get("SPEAKER_ID", "")),
         "",
         "// DuckDNS",
         '#define DUCK_TOKEN    "{}"'.format(values["DUCK_TOKEN"]),

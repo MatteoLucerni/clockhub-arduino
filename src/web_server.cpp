@@ -1,8 +1,8 @@
 #include "web_server.h"
 #include "globals.h"
 #include "scheduler.h"
-#include "time_utils.h"
 #include "storage.h"
+#include "time_utils.h"
 #include <Arduino.h>
 
 static int pinFailCount = 0;
@@ -39,7 +39,7 @@ static void servePinPage(WiFiClient& client, const String& errorMsg = "", bool l
   if (errorMsg.length() > 0) {
     client.println("<div class=\"error\">" + errorMsg + "</div>");
   } else {
-    client.println("<p style=\"color:#888;font-size:0.9rem;margin-bottom:15px\">Inserisci il PIN per accedere</p>");
+    client.println("<p style=\"color:#888;font-size:0.9rem;margin-bottom:15px\">Enter PIN to access</p>");
   }
   if (!locked) {
     client.println("<form id=\"pinForm\" action=\"/\" method=\"GET\">");
@@ -72,39 +72,25 @@ static void handleRoutes(const String& request) {
     manualOverride = !manualOverride;
     if (!manualOverride) digitalWrite(PUMP_PIN, LOW);
   }
-  else if (request.indexOf("GET /SET_GLOBAL") >= 0) {
+  else if (request.indexOf("GET /SAVE_ALL") >= 0) {
     if (!isScheduleLocked()) {
       String durVal = parseParam(request, "dur=");
       if (durVal.length() > 0) sysConfig.runDuration = durVal.toInt();
       sysConfig.globalEnabled = (request.indexOf("en=") > 0);
-      saveConfig();
-      scheduleErrorMsg = "";
-    }
-  }
-  else if (request.indexOf("GET /SET_LIGHT_CONFIG") >= 0) {
-    if (!isScheduleLocked()) {
-      String leadVal = parseParam(request, "lead=", ' ');
+      String leadVal = parseParam(request, "lead=");
       if (leadVal.length() > 0) sysConfig.lightLeadMinutes = leadVal.toInt();
-      saveConfig();
-      scheduleErrorMsg = "";
-    }
-  }
-  else if (request.indexOf("GET /SET_SLEEP_DELAY") >= 0) {
-    String sldVal = parseParam(request, "sld=", ' ');
-    if (sldVal.length() > 0) sysConfig.fallingAsleepMinutes = sldVal.toInt();
-    saveConfig();
-  }
-  else if (request.indexOf("GET /CALC_BED") >= 0) {
-    String whVal = parseParam(request, "wh=");
-    String wmVal = parseParam(request, "wm=", ' ');
-    if (whVal.length() > 0 && wmVal.length() > 0) {
-      targetWakeH  = whVal.toInt();
-      targetWakeM  = wmVal.toInt();
-      showBedTimes = true;
-    }
-  }
-  else if (request.indexOf("GET /SET_SCHEDULE") >= 0) {
-    if (!isScheduleLocked()) {
+      sysConfig.lightEnabled = (request.indexOf("len=") > 0);
+      String bldLead = parseParam(request, "blead=");
+      String bldOpen = parseParam(request, "bopen=");
+      String bldClose = parseParam(request, "bclose=");
+      if (bldLead.length() > 0)  sysConfig.blindLeadMinutes   = bldLead.toInt();
+      if (bldOpen.length() > 0)  sysConfig.blindOpenDuration  = bldOpen.toInt();
+      if (bldClose.length() > 0) sysConfig.blindCloseDuration = bldClose.toInt();
+      sysConfig.blindEnabled = (request.indexOf("ben=") > 0);
+      for (int i = 0; i < 6; i++) {
+        String pVal = parseParam(request, "p" + String(i) + "=");
+        if (pVal.length() > 0) sysConfig.motorSlowdown[i] = (uint8_t)constrain(pVal.toInt(), 0, 100);
+      }
       int getLineEnd = request.indexOf('\n');
       String getLine = (getLineEnd > 0) ? request.substring(0, getLineEnd) : request;
       for (int i = 0; i < 7; i++) {
@@ -121,12 +107,65 @@ static void handleRoutes(const String& request) {
       scheduleErrorMsg = "";
     }
   }
+  else if (request.indexOf("GET /BLIND_OPEN") >= 0) {
+    int curPos    = currentBlindPosition();
+    if (curPos == -1) curPos = 0;
+    int remainPct = 100 - curPos;
+    if (remainPct > 0) {
+      if (blindManualActive && blindManualDirection == -1) delay(300);
+      blindRunStartPos     = curPos;
+      blindManualActive    = true;
+      blindManualDirection = 1;
+      blindRunStartMs      = millis();
+      blindRunFullMs       = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
+      blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+    } else {
+      pendingAnnounceMsg   = "La tapparella è già aperta";
+    }
+  }
+  else if (request.indexOf("GET /BLIND_CLOSE") >= 0) {
+    int curPos    = currentBlindPosition();
+    if (curPos == -1) curPos = 100;
+    int remainPct = curPos;
+    if (remainPct > 0) {
+      if (blindManualActive && blindManualDirection == 1) delay(300);
+      blindRunStartPos     = curPos;
+      blindManualActive    = true;
+      blindManualDirection = -1;
+      blindRunStartMs      = millis();
+      blindRunFullMs       = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
+      blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+    } else {
+      pendingAnnounceMsg   = "La tapparella è già chiusa";
+    }
+  }
+  else if (request.indexOf("GET /BLIND_STOP") >= 0) {
+    if (blindManualActive) {
+      blindPositionPct = currentBlindPosition();
+      saveBlindPosition();
+    }
+    blindManualActive    = false;
+    blindManualDirection = 0;
+  }
+  else if (request.indexOf("GET /SET_SLEEP_DELAY") >= 0) {
+    String sldVal = parseParam(request, "sld=", ' ');
+    if (sldVal.length() > 0) sysConfig.fallingAsleepMinutes = sldVal.toInt();
+    saveConfig();
+  }
+  else if (request.indexOf("GET /CALC_BED") >= 0) {
+    String whVal = parseParam(request, "wh=");
+    String wmVal = parseParam(request, "wm=", ' ');
+    if (whVal.length() > 0 && wmVal.length() > 0) {
+      targetWakeH  = whVal.toInt();
+      targetWakeM  = wmVal.toInt();
+      showBedTimes = true;
+    }
+  }
 }
 
-static void renderScheduleCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+static void renderScheduleCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Weekly Schedule</h2>");
-  client.println("<form action=\"/SET_SCHEDULE\" method=\"GET\">" + hp);
   for (int i = 0; i < 7; i++) {
     client.println("<div class=\"row\"><b>" + String(daysOfWeek[i]) + "</b><div>"
       + "<input type=\"number\" name=\"h" + String(i) + "\" min=\"0\" max=\"23\" value=\"" + String(sysConfig.schedule[i].hour) + "\"" + disabledAttr + "> : "
@@ -134,27 +173,23 @@ static void renderScheduleCard(WiFiClient& client, const String& hp, bool schedu
       + "<input type=\"checkbox\" name=\"a" + String(i) + "\" " + (sysConfig.schedule[i].active ? "checked" : "") + " style=\"width:20px;height:20px;margin-left:8px\"" + disabledAttr + ">"
       + "</div></div>");
   }
-  lockedButton(client, "SAVE SCHEDULE", scheduleLocked);
-  client.println("</form></div>");
+  client.println("</div>");
 }
 
-static void renderSettingsCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+static void renderSettingsCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Settings</h2>");
-  client.println("<form action=\"/SET_GLOBAL\" method=\"GET\">" + hp);
   client.println("<div class=\"row\"><span>Pump Duration (sec)</span><input type=\"number\" name=\"dur\" value=\"" + String(sysConfig.runDuration) + "\"" + disabledAttr + "></div>"
     + "<div class=\"row\"><span>System Enabled</span><input type=\"checkbox\" name=\"en\" " + String(sysConfig.globalEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>");
-  lockedButton(client, "UPDATE SETTINGS", scheduleLocked);
-  client.println("</form></div>");
+  client.println("</div>");
 }
 
-static void renderLightCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+static void renderLightCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Light Settings</h2>");
-  client.println("<form action=\"/SET_LIGHT_CONFIG\" method=\"GET\">" + hp
+  client.println("<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"len\" " + String(sysConfig.lightEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>"
     + "<div class=\"row\"><span>Lead Time (minutes)</span><input type=\"number\" name=\"lead\" value=\"" + String(sysConfig.lightLeadMinutes) + "\"" + disabledAttr + "></div>");
-  lockedButton(client, "UPDATE LIGHT CONFIG", scheduleLocked);
-  client.println("</form></div>");
+  client.println("</div>");
 }
 
 static void renderSleepCard(WiFiClient& client, const String& hp) {
@@ -189,6 +224,52 @@ static void renderSleepCard(WiFiClient& client, const String& hp) {
   client.println("</div>");
 }
 
+static void renderBlindCard(WiFiClient& client, const String& pinParam) {
+  String stateLabel, stateColor;
+  if (blindManualActive && blindManualDirection == 1) {
+    stateLabel = "OPENING"; stateColor = "#34c759";
+  } else if (blindManualActive && blindManualDirection == -1) {
+    stateLabel = "CLOSING"; stateColor = "#ff9500";
+  } else {
+    stateLabel = "IDLE"; stateColor = "#8e8e93";
+  }
+
+  client.println("<div class=\"card\"><h2>Blind</h2>");
+  client.println("<p style=\"font-weight:bold;color:" + stateColor + "\">" + stateLabel + "</p>");
+  client.println("<div style=\"display:flex;gap:8px;margin-top:8px\">");
+  client.println("<a href=\"/BLIND_OPEN?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#34c759;color:white;margin:0\">OPEN</button></a>");
+  client.println("<a href=\"/BLIND_CLOSE?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#ff9500;color:white;margin:0\">CLOSE</button></a>");
+  client.println("<a href=\"/BLIND_STOP?" + pinParam + "\" style=\"flex:1\"><button class=\"btn btn-stop\" style=\"margin:0\">STOP</button></a>");
+  client.println("</div></div>");
+}
+
+static void renderBlindSettingsCard(WiFiClient& client, bool scheduleLocked) {
+  String disabledAttr = scheduleLocked ? " disabled" : "";
+  client.println("<div class=\"card\"><h2>Blind Settings</h2>");
+  client.println("<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"ben\" " + String(sysConfig.blindEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>Open Lead Time (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>Open Duration (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>Close Duration (sec)</span><input type=\"number\" name=\"bclose\" value=\"" + String(sysConfig.blindCloseDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
+  client.println("<h3>End-of-run Slowdown (last 30%)</h3>");
+  client.println("<p style=\"font-size:0.75rem;color:#999;text-align:left;margin:2px 0 10px\">First 70% always at full power &mdash; applies to scheduled runs</p>");
+  const char* pctLabels[6] = {"70%", "75%", "80%", "85%", "90%", "95%"};
+  for (int i = 0; i < 6; i++) {
+    String val = String(sysConfig.motorSlowdown[i]);
+    String iStr = String(i);
+    client.println(
+      "<div class=\"prow\">"
+      "<span class=\"plbl\">" + String(pctLabels[i]) + "</span>"
+      + "<input type=\"range\" name=\"p" + iStr + "\" min=\"0\" max=\"100\" value=\"" + val + "\""
+      + disabledAttr
+      + " oninput=\"document.getElementById('pv" + iStr + "').textContent=this.value+'%'\">"
+      + "<span class=\"pval\" id=\"pv" + iStr + "\">" + val + "%</span>"
+      + "</div>"
+    );
+  }
+  client.println("<p style=\"font-size:0.72rem;color:#bbb;text-align:right;margin:4px 0 0\">At 100%: motor stops</p>");
+  client.println("</div>");
+}
+
 static void renderStatusCard(WiFiClient& client, const String& pinParam) {
   client.print("<div class=\"card\"><h2>Status</h2>"
     + String("<p>") + daysOfWeek[timeClient.getDay()] + ", " + timeClient.getFormattedTime() + "</p>"
@@ -209,7 +290,7 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   client.println();
   client.println("<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
   client.println("<style>");
-  client.println("body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:10px;background-color:#efeff4;color:#333;}.card{background:white;padding:15px;margin:15px auto;max-width:500px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.1rem;margin-top:0;color:#666;border-bottom:1px solid #eee;padding-bottom:8px;text-transform:uppercase;}h3{font-size:0.9rem;color:#888;margin:15px 0 5px 0;text-align:left;border-left:3px solid #007aff;padding-left:8px;}.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}input[type=number]{padding:8px;width:50px;text-align:center;font-size:16px;border:1px solid #ccc;border-radius:6px;}.btn{width:100%;padding:15px;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:10px;}.btn-save{background-color:#007aff;color:white;}.btn-manual{background-color:#ff3b30;color:white;}.btn-stop{background-color:#8e8e93;color:white;}.cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}.cycle-item{background:#f8f8f8;padding:10px;border-radius:8px;font-size:0.85rem;}.cycle-time{font-weight:bold;color:#007aff;display:block;font-size:1.1rem;}.calc-row{display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:10px 0;}.error-msg{background:#ff3b30;color:white;padding:12px;border-radius:8px;margin:15px auto;max-width:500px;font-weight:bold;}");
+  client.println("body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:10px;background-color:#efeff4;color:#333;}.card{background:white;padding:15px;margin:15px auto;max-width:500px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.1rem;margin-top:0;color:#666;border-bottom:1px solid #eee;padding-bottom:8px;text-transform:uppercase;}h3{font-size:0.9rem;color:#888;margin:15px 0 5px 0;text-align:left;border-left:3px solid #007aff;padding-left:8px;}.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}input[type=number]{padding:8px;width:50px;text-align:center;font-size:16px;border:1px solid #ccc;border-radius:6px;}.btn{width:100%;padding:15px;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:10px;}.btn-save{background-color:#007aff;color:white;}.btn-manual{background-color:#ff3b30;color:white;}.btn-stop{background-color:#8e8e93;color:white;}.cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}.cycle-item{background:#f8f8f8;padding:10px;border-radius:8px;font-size:0.85rem;}.cycle-time{font-weight:bold;color:#007aff;display:block;font-size:1.1rem;}.calc-row{display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:10px 0;}.error-msg{background:#ff3b30;color:white;padding:12px;border-radius:8px;margin:15px auto;max-width:500px;font-weight:bold;}.prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;}.plbl{width:36px;font-size:0.82rem;color:#666;text-align:right;flex-shrink:0;}.prow input[type=range]{flex:1;min-width:0;height:28px;cursor:pointer;}.pval{width:38px;font-size:0.9rem;font-weight:bold;color:#007aff;text-align:right;flex-shrink:0;}");
   client.println("</style>");
 
   client.println("<script>");
@@ -228,10 +309,16 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
     client.println("<div class=\"error-msg\">" + scheduleErrorMsg + "</div>");
   }
 
-  renderScheduleCard(client, hp, scheduleLocked);
-  renderSettingsCard(client, hp, scheduleLocked);
-  renderLightCard(client, hp, scheduleLocked);
+  client.println("<form action=\"/SAVE_ALL\" method=\"GET\">" + hp);
+  renderScheduleCard(client, scheduleLocked);
+  renderSettingsCard(client, scheduleLocked);
+  renderLightCard(client, scheduleLocked);
+  renderBlindSettingsCard(client, scheduleLocked);
+  client.println("<div class=\"card\" style=\"padding:10px\">");
+  lockedButton(client, "SAVE ALL SETTINGS", scheduleLocked);
+  client.println("</div></form>");
   renderSleepCard(client, hp);
+  renderBlindCard(client, pinParam);
   renderStatusCard(client, pinParam);
 }
 
@@ -272,15 +359,15 @@ void handleWebRequest() {
 
             if (pinFailCount >= PIN_MAX_ATTEMPTS) {
               int minsLeft = (int)((PIN_LOCKOUT_MS - (millis() - pinFirstFailTime)) / 60000) + 1;
-              servePinPage(client, "Troppi tentativi. Riprova tra " + String(minsLeft) + " min.", true);
+              servePinPage(client, "Too many attempts. Try again in " + String(minsLeft) + " min.", true);
             } else if (hasPin) {
               if (pinFailCount == 0) pinFirstFailTime = millis();
               pinFailCount++;
               int remaining = PIN_MAX_ATTEMPTS - pinFailCount;
               if (remaining > 0) {
-                servePinPage(client, "PIN non corretto. Tentativi rimanenti: " + String(remaining));
+                servePinPage(client, "Incorrect PIN. Remaining attempts: " + String(remaining));
               } else {
-                servePinPage(client, "Troppi tentativi. Riprova tra 5 min.", true);
+                servePinPage(client, "Too many attempts. Try again in 5 min.", true);
               }
             } else {
               servePinPage(client);
