@@ -72,26 +72,14 @@ static void handleRoutes(const String& request) {
     manualOverride = !manualOverride;
     if (!manualOverride) digitalWrite(PUMP_PIN, LOW);
   }
-  else if (request.indexOf("GET /SET_GLOBAL") >= 0) {
+  else if (request.indexOf("GET /SAVE_ALL") >= 0) {
     if (!isScheduleLocked()) {
       String durVal = parseParam(request, "dur=");
       if (durVal.length() > 0) sysConfig.runDuration = durVal.toInt();
       sysConfig.globalEnabled = (request.indexOf("en=") > 0);
-      saveConfig();
-      scheduleErrorMsg = "";
-    }
-  }
-  else if (request.indexOf("GET /SET_LIGHT_CONFIG") >= 0) {
-    if (!isScheduleLocked()) {
       String leadVal = parseParam(request, "lead=");
       if (leadVal.length() > 0) sysConfig.lightLeadMinutes = leadVal.toInt();
       sysConfig.lightEnabled = (request.indexOf("len=") > 0);
-      saveConfig();
-      scheduleErrorMsg = "";
-    }
-  }
-  else if (request.indexOf("GET /SET_BLIND_CONFIG") >= 0) {
-    if (!isScheduleLocked()) {
       String bldLead = parseParam(request, "blead=");
       String bldOpen = parseParam(request, "bopen=");
       String bldClose = parseParam(request, "bclose=");
@@ -102,6 +90,18 @@ static void handleRoutes(const String& request) {
       for (int i = 0; i < 6; i++) {
         String pVal = parseParam(request, "p" + String(i) + "=");
         if (pVal.length() > 0) sysConfig.motorSlowdown[i] = (uint8_t)constrain(pVal.toInt(), 0, 100);
+      }
+      int getLineEnd = request.indexOf('\n');
+      String getLine = (getLineEnd > 0) ? request.substring(0, getLineEnd) : request;
+      for (int i = 0; i < 7; i++) {
+        String hK = "h" + String(i) + "=";
+        String mK = "m" + String(i) + "=";
+        String aK = "a" + String(i) + "=";
+        String hVal = parseParam(getLine, hK);
+        String mVal = parseParam(getLine, mK);
+        if (hVal.length() > 0) sysConfig.schedule[i].hour   = hVal.toInt();
+        if (mVal.length() > 0) sysConfig.schedule[i].minute = mVal.toInt();
+        sysConfig.schedule[i].active = (getLine.indexOf(aK) >= 0);
       }
       saveConfig();
       scheduleErrorMsg = "";
@@ -161,30 +161,11 @@ static void handleRoutes(const String& request) {
       showBedTimes = true;
     }
   }
-  else if (request.indexOf("GET /SET_SCHEDULE") >= 0) {
-    if (!isScheduleLocked()) {
-      int getLineEnd = request.indexOf('\n');
-      String getLine = (getLineEnd > 0) ? request.substring(0, getLineEnd) : request;
-      for (int i = 0; i < 7; i++) {
-        String hK = "h" + String(i) + "=";
-        String mK = "m" + String(i) + "=";
-        String aK = "a" + String(i) + "=";
-        String hVal = parseParam(getLine, hK);
-        String mVal = parseParam(getLine, mK);
-        if (hVal.length() > 0) sysConfig.schedule[i].hour   = hVal.toInt();
-        if (mVal.length() > 0) sysConfig.schedule[i].minute = mVal.toInt();
-        sysConfig.schedule[i].active = (getLine.indexOf(aK) >= 0);
-      }
-      saveConfig();
-      scheduleErrorMsg = "";
-    }
-  }
 }
 
-static void renderScheduleCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+static void renderScheduleCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Weekly Schedule</h2>");
-  client.println("<form action=\"/SET_SCHEDULE\" method=\"GET\">" + hp);
   for (int i = 0; i < 7; i++) {
     client.println("<div class=\"row\"><b>" + String(daysOfWeek[i]) + "</b><div>"
       + "<input type=\"number\" name=\"h" + String(i) + "\" min=\"0\" max=\"23\" value=\"" + String(sysConfig.schedule[i].hour) + "\"" + disabledAttr + "> : "
@@ -192,28 +173,23 @@ static void renderScheduleCard(WiFiClient& client, const String& hp, bool schedu
       + "<input type=\"checkbox\" name=\"a" + String(i) + "\" " + (sysConfig.schedule[i].active ? "checked" : "") + " style=\"width:20px;height:20px;margin-left:8px\"" + disabledAttr + ">"
       + "</div></div>");
   }
-  lockedButton(client, "SAVE SCHEDULE", scheduleLocked);
-  client.println("</form></div>");
+  client.println("</div>");
 }
 
-static void renderSettingsCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+static void renderSettingsCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Settings</h2>");
-  client.println("<form action=\"/SET_GLOBAL\" method=\"GET\">" + hp);
   client.println("<div class=\"row\"><span>Pump Duration (sec)</span><input type=\"number\" name=\"dur\" value=\"" + String(sysConfig.runDuration) + "\"" + disabledAttr + "></div>"
     + "<div class=\"row\"><span>System Enabled</span><input type=\"checkbox\" name=\"en\" " + String(sysConfig.globalEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>");
-  lockedButton(client, "UPDATE SETTINGS", scheduleLocked);
-  client.println("</form></div>");
+  client.println("</div>");
 }
 
-static void renderLightCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+static void renderLightCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Light Settings</h2>");
-  client.println("<form action=\"/SET_LIGHT_CONFIG\" method=\"GET\">" + hp
-    + "<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"len\" " + String(sysConfig.lightEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>"
+  client.println("<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"len\" " + String(sysConfig.lightEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>"
     + "<div class=\"row\"><span>Lead Time (minutes)</span><input type=\"number\" name=\"lead\" value=\"" + String(sysConfig.lightLeadMinutes) + "\"" + disabledAttr + "></div>");
-  lockedButton(client, "UPDATE LIGHT CONFIG", scheduleLocked);
-  client.println("</form></div>");
+  client.println("</div>");
 }
 
 static void renderSleepCard(WiFiClient& client, const String& hp) {
@@ -267,10 +243,9 @@ static void renderBlindCard(WiFiClient& client, const String& pinParam) {
   client.println("</div></div>");
 }
 
-static void renderBlindSettingsCard(WiFiClient& client, const String& hp, bool scheduleLocked) {
+static void renderBlindSettingsCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Blind Settings</h2>");
-  client.println("<form action=\"/SET_BLIND_CONFIG\" method=\"GET\">" + hp);
   client.println("<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"ben\" " + String(sysConfig.blindEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Open Lead Time (min)</span><input type=\"number\" name=\"blead\" value=\"" + String(sysConfig.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
   client.println("<div class=\"row\"><span>Open Duration (sec)</span><input type=\"number\" name=\"bopen\" value=\"" + String(sysConfig.blindOpenDuration) + "\" min=\"1\"" + disabledAttr + "></div>");
@@ -292,8 +267,7 @@ static void renderBlindSettingsCard(WiFiClient& client, const String& hp, bool s
     );
   }
   client.println("<p style=\"font-size:0.72rem;color:#bbb;text-align:right;margin:4px 0 0\">At 100%: motor stops</p>");
-  lockedButton(client, "SAVE BLIND SETTINGS", scheduleLocked);
-  client.println("</form></div>");
+  client.println("</div>");
 }
 
 static void renderStatusCard(WiFiClient& client, const String& pinParam) {
@@ -335,10 +309,14 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
     client.println("<div class=\"error-msg\">" + scheduleErrorMsg + "</div>");
   }
 
-  renderScheduleCard(client, hp, scheduleLocked);
-  renderSettingsCard(client, hp, scheduleLocked);
-  renderLightCard(client, hp, scheduleLocked);
-  renderBlindSettingsCard(client, hp, scheduleLocked);
+  client.println("<form action=\"/SAVE_ALL\" method=\"GET\">" + hp);
+  renderScheduleCard(client, scheduleLocked);
+  renderSettingsCard(client, scheduleLocked);
+  renderLightCard(client, scheduleLocked);
+  renderBlindSettingsCard(client, scheduleLocked);
+  client.println("<div class=\"card\" style=\"padding:10px\">");
+  lockedButton(client, "SAVE ALL SETTINGS", scheduleLocked);
+  client.println("</div></form>");
   renderSleepCard(client, hp);
   renderBlindCard(client, pinParam);
   renderStatusCard(client, pinParam);
