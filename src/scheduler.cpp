@@ -1,6 +1,7 @@
 #include "scheduler.h"
 #include "globals.h"
 #include "network.h"
+#include "storage.h"
 #include <Arduino.h>
 
 // direction: 1 = open (backward), -1 = close (forward), 0 = stop
@@ -22,14 +23,35 @@ static void setMotor(int direction, uint8_t power = 255) {
 }
 
 // Returns PWM (0-255) for the current moment in a timed run.
-// First 80%: full power. Last 20%: 4 slowdown sub-segments of 5% each.
-static uint8_t calcMotorPWM(unsigned long elapsed, unsigned long total) {
-  if (total == 0 || elapsed >= total) return 0;
-  unsigned long pct = elapsed * 100UL / total; // 0..99
-  if (pct < 80) return 255;
-  uint8_t seg = (uint8_t)((pct - 80) / 5); // 0..3
-  if (seg > 3) seg = 3;
+// Slowdown threshold is always the last 20% of fullMs (the complete open/close duration),
+// regardless of how short the actual run is (e.g. partial travel from mid-position).
+static uint8_t calcMotorPWM(unsigned long elapsed, unsigned long runMs, unsigned long fullMs) {
+  if (runMs == 0 || elapsed >= runMs) return 0;
+  unsigned long timeFromEnd = runMs - elapsed;
+  unsigned long slowdownMs  = fullMs / 5;   // 20% of full duration
+  unsigned long segMs       = fullMs / 20;  // 5% of full duration per segment
+  if (segMs == 0 || timeFromEnd > slowdownMs) return 255;
+  uint8_t seg;
+  if      (timeFromEnd < segMs)         seg = 3;
+  else if (timeFromEnd < segMs * 2UL)   seg = 2;
+  else if (timeFromEnd < segMs * 3UL)   seg = 1;
+  else                                  seg = 0;
   return (uint8_t)((uint32_t)sysConfig.motorSlowdown[seg] * 255 / 100);
+}
+
+// Returns the estimated blind position (0=closed, 100=open, -1=unknown).
+// If the motor is currently running, interpolates from the run start position.
+int currentBlindPosition() {
+  if (!blindManualActive || blindRunTotalMs == 0 || blindRunStartPos < 0)
+    return blindPositionPct;
+  unsigned long elapsed = millis() - blindRunStartMs;
+  if (elapsed >= blindRunTotalMs) return (blindManualDirection == 1) ? 100 : 0;
+  int pos;
+  if (blindManualDirection == 1)
+    pos = blindRunStartPos + (int)((long)(100 - blindRunStartPos) * (long)elapsed / (long)blindRunTotalMs);
+  else
+    pos = blindRunStartPos - (int)((long)blindRunStartPos       * (long)elapsed / (long)blindRunTotalMs);
+  return constrain(pos, 0, 100);
 }
 
 bool isScheduleLocked() {
@@ -68,10 +90,12 @@ void runAlarmLogic() {
     unsigned long elapsed = millis() - blindRunStartMs;
     if (elapsed >= blindRunTotalMs) {
       setMotor(0);
+      blindPositionPct     = (blindManualDirection == 1) ? 100 : 0;
+      saveBlindPosition();
       blindManualActive    = false;
       blindManualDirection = 0;
     } else {
-      setMotor(blindManualDirection, calcMotorPWM(elapsed, blindRunTotalMs));
+      setMotor(blindManualDirection, calcMotorPWM(elapsed, blindRunTotalMs, blindRunFullMs));
     }
   } else {
     setMotor(0);
@@ -113,11 +137,17 @@ void runAlarmLogic() {
 
       // Trigger blind opening (non-blocking: start the state machine)
       if (sysConfig.blindEnabled && !blindManualActive && sysConfig.schedule[bldDay].active && curTotal == bldTotal && !blindTriggered) {
-        blindManualActive    = true;
-        blindManualDirection = 1;
-        blindRunStartMs      = millis();
-        blindRunTotalMs      = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
-        blindTriggered       = true;
+        int startPos  = (blindPositionPct == -1) ? 0 : blindPositionPct;
+        int remainPct = 100 - startPos;
+        if (remainPct > 0) {
+          blindRunStartPos     = startPos;
+          blindManualActive    = true;
+          blindManualDirection = 1;
+          blindRunStartMs      = millis();
+          blindRunFullMs       = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
+          blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+        }
+        blindTriggered = true;
       }
 
       // Trigger pump (water alarm)

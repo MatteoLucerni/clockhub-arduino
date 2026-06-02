@@ -2,6 +2,10 @@
 #include "globals.h"
 #include <EEPROM.h>
 
+struct BlindPosStore { int checkKey; int positionPct; };
+static const int BLIND_POS_ADDR     = 256;
+static const int BLIND_POS_CHECK_KEY = 54321;
+
 void loadConfig() {
   EEPROM.get(0, sysConfig);
   if (sysConfig.checkKey != 12351) {
@@ -29,4 +33,15 @@ void loadConfig() {
 
 void saveConfig() {
   EEPROM.put(0, sysConfig);
+}
+
+void loadBlindPosition() {
+  BlindPosStore store;
+  EEPROM.get(BLIND_POS_ADDR, store);
+  blindPositionPct = (store.checkKey == BLIND_POS_CHECK_KEY) ? store.positionPct : -1;
+}
+
+void saveBlindPosition() {
+  BlindPosStore store = { BLIND_POS_CHECK_KEY, blindPositionPct };
+  EEPROM.put(BLIND_POS_ADDR, store);
 }

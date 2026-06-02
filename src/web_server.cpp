@@ -1,8 +1,8 @@
 #include "web_server.h"
 #include "globals.h"
 #include "scheduler.h"
-#include "time_utils.h"
 #include "storage.h"
+#include "time_utils.h"
 #include <Arduino.h>
 
 static int pinFailCount = 0;
@@ -108,18 +108,36 @@ static void handleRoutes(const String& request) {
     }
   }
   else if (request.indexOf("GET /BLIND_OPEN") >= 0) {
-    blindManualActive    = true;
-    blindManualDirection = 1;
-    blindRunStartMs      = millis();
-    blindRunTotalMs      = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
+    int curPos    = currentBlindPosition();
+    if (curPos == -1) curPos = 0;
+    int remainPct = 100 - curPos;
+    if (remainPct > 0) {
+      blindRunStartPos     = curPos;
+      blindManualActive    = true;
+      blindManualDirection = 1;
+      blindRunStartMs      = millis();
+      blindRunFullMs       = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
+      blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+    }
   }
   else if (request.indexOf("GET /BLIND_CLOSE") >= 0) {
-    blindManualActive    = true;
-    blindManualDirection = -1;
-    blindRunStartMs      = millis();
-    blindRunTotalMs      = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
+    int curPos    = currentBlindPosition();
+    if (curPos == -1) curPos = 100;
+    int remainPct = curPos;
+    if (remainPct > 0) {
+      blindRunStartPos     = curPos;
+      blindManualActive    = true;
+      blindManualDirection = -1;
+      blindRunStartMs      = millis();
+      blindRunFullMs       = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
+      blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+    }
   }
   else if (request.indexOf("GET /BLIND_STOP") >= 0) {
+    if (blindManualActive) {
+      blindPositionPct = currentBlindPosition();
+      saveBlindPosition();
+    }
     blindManualActive    = false;
     blindManualDirection = 0;
   }

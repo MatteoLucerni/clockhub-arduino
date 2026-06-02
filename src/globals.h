@@ -30,6 +30,9 @@ extern bool blindManualActive;
 extern int  blindManualDirection;
 extern unsigned long blindRunStartMs;
 extern unsigned long blindRunTotalMs;
+extern unsigned long blindRunFullMs;
+extern int  blindRunStartPos;
+extern int  blindPositionPct;
 
 // Sleep calculator state
 extern int targetWakeH;

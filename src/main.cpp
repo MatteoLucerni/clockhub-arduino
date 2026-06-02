@@ -33,6 +33,9 @@ bool   blindManualActive = false;
 int    blindManualDirection = 0;
 unsigned long blindRunStartMs = 0;
 unsigned long blindRunTotalMs = 0;
+unsigned long blindRunFullMs  = 0;
+int    blindRunStartPos = 0;
+int    blindPositionPct = -1;
 
 int  targetWakeH = 8;
 int  targetWakeM = 30;
@@ -56,6 +59,7 @@ void setup() {
   digitalWrite(MOTOR_IN1, LOW);
   digitalWrite(MOTOR_IN2, LOW);
   loadConfig();
+  loadBlindPosition();
   setupWiFi();
   updateDuckDNS();
   lastDuckDNSUpdate = millis();
