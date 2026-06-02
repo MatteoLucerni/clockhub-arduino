@@ -118,7 +118,6 @@ static void handleRoutes(const String& request) {
       blindRunStartMs      = millis();
       blindRunFullMs       = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
       blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
-      pendingAnnounceMsg   = "Ok apro la tapparella";
     } else {
       pendingAnnounceMsg   = "La tapparella è già aperta";
     }
@@ -134,7 +133,6 @@ static void handleRoutes(const String& request) {
       blindRunStartMs      = millis();
       blindRunFullMs       = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
       blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
-      pendingAnnounceMsg   = "Ok chiudo la tapparella";
     } else {
       pendingAnnounceMsg   = "La tapparella è già chiusa";
     }
