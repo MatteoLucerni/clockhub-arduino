@@ -112,6 +112,7 @@ static void handleRoutes(const String& request) {
     if (curPos == -1) curPos = 0;
     int remainPct = 100 - curPos;
     if (remainPct > 0) {
+      if (blindManualActive && blindManualDirection == -1) delay(300);
       blindRunStartPos     = curPos;
       blindManualActive    = true;
       blindManualDirection = 1;
@@ -127,6 +128,7 @@ static void handleRoutes(const String& request) {
     if (curPos == -1) curPos = 100;
     int remainPct = curPos;
     if (remainPct > 0) {
+      if (blindManualActive && blindManualDirection == 1) delay(300);
       blindRunStartPos     = curPos;
       blindManualActive    = true;
       blindManualDirection = -1;
@@ -139,9 +141,8 @@ static void handleRoutes(const String& request) {
   }
   else if (request.indexOf("GET /BLIND_STOP") >= 0) {
     if (blindManualActive) {
-      blindPositionPct   = currentBlindPosition();
+      blindPositionPct = currentBlindPosition();
       saveBlindPosition();
-      pendingAnnounceMsg = "Tapparella fermata";
     }
     blindManualActive    = false;
     blindManualDirection = 0;
