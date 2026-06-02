@@ -348,7 +348,7 @@ void handleWebRequest() {
             break;
           }
 
-          if ((request.indexOf("GET /BLIND_OPEN") >= 0 || request.indexOf("GET /BLIND_CLOSE") >= 0)
+          if ((request.indexOf("GET /BLIND_OPEN") >= 0 || request.indexOf("GET /BLIND_CLOSE") >= 0 || request.indexOf("GET /BLIND_STOP") >= 0)
               && request.indexOf("pin=") < 0) {
             handleRoutes(request);
             client.println("HTTP/1.1 200 OK");
