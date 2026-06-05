@@ -147,6 +147,15 @@ static void handleRoutes(const String& request) {
     blindManualActive    = false;
     blindManualDirection = 0;
   }
+  else if (request.indexOf("GET /BLIND_FORCE_POS") >= 0) {
+    String posVal = parseParam(request, "pos=");
+    if (posVal.length() > 0) {
+      blindManualActive    = false;
+      blindManualDirection = 0;
+      blindPositionPct     = constrain(posVal.toInt(), 0, 100);
+      saveBlindPosition();
+    }
+  }
   else if (request.indexOf("GET /SET_SLEEP_DELAY") >= 0) {
     String sldVal = parseParam(request, "sld=", ' ');
     if (sldVal.length() > 0) sysConfig.fallingAsleepMinutes = sldVal.toInt();
@@ -234,13 +243,25 @@ static void renderBlindCard(WiFiClient& client, const String& pinParam) {
     stateLabel = "IDLE"; stateColor = "#8e8e93";
   }
 
+  int pos = currentBlindPosition();
+  String posStr = (pos < 0) ? "unknown" : (String(pos) + "% open");
+
   client.println("<div class=\"card\"><h2>Blind</h2>");
-  client.println("<p style=\"font-weight:bold;color:" + stateColor + "\">" + stateLabel + "</p>");
-  client.println("<div style=\"display:flex;gap:8px;margin-top:8px\">");
+  client.println("<p style=\"font-weight:bold;color:" + stateColor + ";margin-bottom:2px\">" + stateLabel + "</p>");
+  client.println("<p style=\"margin:0 0 10px;color:#555\">Position: <b>" + posStr + "</b></p>");
+  client.println("<div style=\"display:flex;gap:8px\">");
   client.println("<a href=\"/BLIND_OPEN?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#34c759;color:white;margin:0\">OPEN</button></a>");
   client.println("<a href=\"/BLIND_CLOSE?" + pinParam + "\" style=\"flex:1\"><button class=\"btn\" style=\"background:#ff9500;color:white;margin:0\">CLOSE</button></a>");
   client.println("<a href=\"/BLIND_STOP?" + pinParam + "\" style=\"flex:1\"><button class=\"btn btn-stop\" style=\"margin:0\">STOP</button></a>");
-  client.println("</div></div>");
+  client.println("</div>");
+  client.println("<div style=\"margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0\">");
+  client.println("<p style=\"color:#bbb;font-size:0.75rem;margin:0 0 8px\">Position override (motor does not move)</p>");
+  client.println("<div style=\"display:flex;gap:8px\">");
+  client.println("<a href=\"/BLIND_FORCE_POS?" + pinParam + "&pos=0\" onclick=\"return confirm('Force position to CLOSED (0% open)? The motor will not move.')\" style=\"flex:1\">");
+  client.println("<button class=\"btn\" style=\"background:#ff3b30;color:white;margin:0;font-size:0.88rem;padding:10px\">Force Closed</button></a>");
+  client.println("<a href=\"/BLIND_FORCE_POS?" + pinParam + "&pos=100\" onclick=\"return confirm('Force position to OPEN (100% open)? The motor will not move.')\" style=\"flex:1\">");
+  client.println("<button class=\"btn\" style=\"background:#34c759;color:white;margin:0;font-size:0.88rem;padding:10px\">Force Open</button></a>");
+  client.println("</div></div></div>");
 }
 
 static void renderBlindSettingsCard(WiFiClient& client, bool scheduleLocked) {

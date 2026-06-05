@@ -10,14 +10,14 @@ void loadConfig() {
   EEPROM.get(0, sysConfig);
   if (sysConfig.checkKey != 12352) {
     sysConfig.globalEnabled = true;
-    sysConfig.runDuration = 10;
+    sysConfig.runDuration = 5;
     sysConfig.lightEnabled = true;
-    sysConfig.lightLeadMinutes = 5;
+    sysConfig.lightLeadMinutes = 0;
     sysConfig.fallingAsleepMinutes = 15;
     sysConfig.blindEnabled = true;
     sysConfig.blindLeadMinutes = 5;
-    sysConfig.blindOpenDuration = 145;
-    sysConfig.blindCloseDuration = 145;
+    sysConfig.blindOpenDuration = 150;
+    sysConfig.blindCloseDuration = 150;
     // Last 30% slowdown: power at 70%, 75%, 80%, 85%, 90%, 95% of run
     uint8_t defaultSlowdown[6] = {80, 75, 70, 60, 40, 25};
     for (int i = 0; i < 6; i++) sysConfig.motorSlowdown[i] = defaultSlowdown[i];
