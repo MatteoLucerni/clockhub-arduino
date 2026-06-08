@@ -101,16 +101,17 @@ bool isBlindClosingLocked() {
     if (checkDay == curDay) {
       minUntilAlarm = almTotal - curTotal;
       if (minUntilAlarm < 0) minUntilAlarm += 1440;
+      // Block within 30 min before OR after today's alarm
+      // (high value near 1440 means we just passed the alarm)
+      if (minUntilAlarm <= 30 || minUntilAlarm >= 1410) {
+        return true;
+      }
     } else if (checkDay == ((curDay + 1) % 7)) {
       minUntilAlarm = (1440 - curTotal) + almTotal;
-    } else {
-      continue;
-    }
-
-    // Block within 30 min before alarm (minUntilAlarm <= 30)
-    // or within 30 min after alarm (minUntilAlarm >= 1410)
-    if (minUntilAlarm <= 30 || minUntilAlarm >= 1410) {
-      return true;
+      // Block only within 30 min before next day's alarm
+      if (minUntilAlarm <= 30) {
+        return true;
+      }
     }
   }
 
