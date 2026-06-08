@@ -124,36 +124,48 @@ static void handleRoutes(const String& request) {
     }
   }
   else if (request.indexOf("GET /BLIND_CLOSE") >= 0) {
-    int curPos    = currentBlindPosition();
-    if (curPos == -1) curPos = 100;
-    int remainPct = curPos;
-    if (remainPct > 0) {
-      if (blindManualActive && blindManualDirection == 1) delay(300);
-      blindRunStartPos     = curPos;
-      blindManualActive    = true;
-      blindManualDirection = -1;
-      blindRunStartMs      = millis();
-      blindRunFullMs       = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
-      blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+    if (isBlindClosingLocked()) {
+      pendingAnnounceMsg = "Tapparella bloccata: finestra di sveglia attiva";
     } else {
-      pendingAnnounceMsg   = "La tapparella è già chiusa";
+      int curPos    = currentBlindPosition();
+      if (curPos == -1) curPos = 100;
+      int remainPct = curPos;
+      if (remainPct > 0) {
+        if (blindManualActive && blindManualDirection == 1) delay(300);
+        blindRunStartPos     = curPos;
+        blindManualActive    = true;
+        blindManualDirection = -1;
+        blindRunStartMs      = millis();
+        blindRunFullMs       = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
+        blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+      } else {
+        pendingAnnounceMsg   = "La tapparella è già chiusa";
+      }
     }
   }
   else if (request.indexOf("GET /BLIND_STOP") >= 0) {
-    if (blindManualActive) {
-      blindPositionPct = currentBlindPosition();
-      saveBlindPosition();
-    }
-    blindManualActive    = false;
-    blindManualDirection = 0;
-  }
-  else if (request.indexOf("GET /BLIND_FORCE_POS") >= 0) {
-    String posVal = parseParam(request, "pos=");
-    if (posVal.length() > 0) {
+    if (isBlindClosingLocked()) {
+      pendingAnnounceMsg = "Tapparella bloccata: finestra di sveglia attiva";
+    } else {
+      if (blindManualActive) {
+        blindPositionPct = currentBlindPosition();
+        saveBlindPosition();
+      }
       blindManualActive    = false;
       blindManualDirection = 0;
-      blindPositionPct     = constrain(posVal.toInt(), 0, 100);
-      saveBlindPosition();
+    }
+  }
+  else if (request.indexOf("GET /BLIND_FORCE_POS") >= 0) {
+    if (isBlindClosingLocked()) {
+      pendingAnnounceMsg = "Tapparella bloccata: finestra di sveglia attiva";
+    } else {
+      String posVal = parseParam(request, "pos=");
+      if (posVal.length() > 0) {
+        blindManualActive    = false;
+        blindManualDirection = 0;
+        blindPositionPct     = constrain(posVal.toInt(), 0, 100);
+        saveBlindPosition();
+      }
     }
   }
   else if (request.indexOf("GET /SET_SLEEP_DELAY") >= 0) {

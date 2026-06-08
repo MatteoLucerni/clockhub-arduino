@@ -86,6 +86,37 @@ bool isScheduleLocked() {
   return false;
 }
 
+bool isBlindClosingLocked() {
+  if (!sysConfig.globalEnabled) return false;
+
+  int curDay   = timeClient.getDay();
+  int curTotal = timeClient.getHours() * 60 + timeClient.getMinutes();
+
+  for (int checkDay = 0; checkDay < 7; checkDay++) {
+    if (!sysConfig.schedule[checkDay].active) continue;
+
+    int almTotal = sysConfig.schedule[checkDay].hour * 60 + sysConfig.schedule[checkDay].minute;
+    int minUntilAlarm;
+
+    if (checkDay == curDay) {
+      minUntilAlarm = almTotal - curTotal;
+      if (minUntilAlarm < 0) minUntilAlarm += 1440;
+    } else if (checkDay == ((curDay + 1) % 7)) {
+      minUntilAlarm = (1440 - curTotal) + almTotal;
+    } else {
+      continue;
+    }
+
+    // Block within 30 min before alarm (minUntilAlarm <= 30)
+    // or within 30 min after alarm (minUntilAlarm >= 1410)
+    if (minUntilAlarm <= 30 || minUntilAlarm >= 1410) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void runAlarmLogic() {
   // Non-blocking blind motor state machine
   if (blindManualActive) {
