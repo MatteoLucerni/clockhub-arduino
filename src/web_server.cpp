@@ -129,12 +129,12 @@ static void handleRoutes(const String& request) {
       blindRunFullMs       = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
       blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
     } else {
-      pendingAnnounceMsg   = "La tapparella è già aperta";
+      pendingAnnounceMsg   = "The blind is already open";
     }
   }
   else if (request.indexOf("GET /BLIND_CLOSE") >= 0) {
     if (isBlindClosingLocked()) {
-      pendingAnnounceMsg = "Tapparella bloccata: finestra di sveglia attiva";
+      pendingAnnounceMsg = "Blind locked: alarm window active";
     } else {
       int curPos    = currentBlindPosition();
       if (curPos == -1) curPos = 100;
@@ -148,13 +148,13 @@ static void handleRoutes(const String& request) {
         blindRunFullMs       = (unsigned long)sysConfig.blindCloseDuration * 1000UL;
         blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
       } else {
-        pendingAnnounceMsg   = "La tapparella è già chiusa";
+        pendingAnnounceMsg   = "The blind is already closed";
       }
     }
   }
   else if (request.indexOf("GET /BLIND_STOP") >= 0) {
     if (isBlindClosingLocked()) {
-      pendingAnnounceMsg = "Tapparella bloccata: finestra di sveglia attiva";
+      pendingAnnounceMsg = "Blind locked: alarm window active";
     } else {
       if (blindManualActive) {
         blindPositionPct = currentBlindPosition();
@@ -166,7 +166,7 @@ static void handleRoutes(const String& request) {
   }
   else if (request.indexOf("GET /BLIND_FORCE_POS") >= 0) {
     if (isBlindClosingLocked()) {
-      pendingAnnounceMsg = "Tapparella bloccata: finestra di sveglia attiva";
+      pendingAnnounceMsg = "Blind locked: alarm window active";
     } else {
       String posVal = parseParam(request, "pos=");
       if (posVal.length() > 0) {
@@ -344,7 +344,7 @@ static void renderFirmwareCard(WiFiClient& client, const String& pinParam, bool 
     if (scheduleLocked || blindManualActive) {
       client.println("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" disabled>UPDATE NOW</button>");
     } else {
-      client.println("<a href=\"/OTA_APPLY?" + pinParam + "\" onclick=\"return confirm('Aggiornare il firmware ora? Il sistema si bloccherà per circa un minuto e poi il dispositivo si riavvierà.')\">");
+      client.println("<a href=\"/OTA_APPLY?" + pinParam + "\" onclick=\"return confirm('Update firmware now? The system will freeze for about a minute and then the device will reboot.')\">");
       client.println("<button class=\"btn btn-manual\">UPDATE NOW</button></a>");
     }
   } else {
@@ -373,7 +373,7 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   client.println("Cache-Control: no-store");
   client.println("Connection: close");
   client.println();
-  client.println("<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+  client.println("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
   client.println("<style>");
   client.println("body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:10px;background-color:#efeff4;color:#333;}.card{background:white;padding:15px;margin:15px auto;max-width:500px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.1rem;margin-top:0;color:#666;border-bottom:1px solid #eee;padding-bottom:8px;text-transform:uppercase;}h3{font-size:0.9rem;color:#888;margin:15px 0 5px 0;text-align:left;border-left:3px solid #007aff;padding-left:8px;}.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}input[type=number]{padding:8px;width:50px;text-align:center;font-size:16px;border:1px solid #ccc;border-radius:6px;}.btn{width:100%;padding:15px;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:10px;}.btn-save{background-color:#007aff;color:white;}.btn-manual{background-color:#ff3b30;color:white;}.btn-stop{background-color:#8e8e93;color:white;}.cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}.cycle-item{background:#f8f8f8;padding:10px;border-radius:8px;font-size:0.85rem;}.cycle-time{font-weight:bold;color:#007aff;display:block;font-size:1.1rem;}.calc-row{display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:10px 0;}.error-msg{background:#ff3b30;color:white;padding:12px;border-radius:8px;margin:15px auto;max-width:500px;font-weight:bold;}.prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;}.plbl{width:36px;font-size:0.82rem;color:#666;text-align:right;flex-shrink:0;}.prow input[type=range]{flex:1;min-width:0;height:28px;cursor:pointer;}.pval{width:38px;font-size:0.9rem;font-weight:bold;color:#007aff;text-align:right;flex-shrink:0;}.switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;}.switch input{opacity:0;width:0;height:0;}.switch .slider{position:absolute;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.2s;border-radius:26px;cursor:pointer;}.switch .slider:before{position:absolute;content:\"\";height:20px;width:20px;left:3px;bottom:3px;background-color:#fff;transition:.2s;border-radius:50%;}.switch input:checked+.slider{background-color:#34c759;}.switch input:checked+.slider:before{transform:translateX(20px);}.switch input:disabled+.slider{opacity:.5;cursor:not-allowed;}");
   client.println("</style>");

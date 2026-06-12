@@ -378,11 +378,11 @@ def handle_routes(path, qs):
                 state["blindRunFullSec"] = float(state["blindOpenDuration"])
                 state["blindRunTotalSec"] = state["blindRunFullSec"] * remain_pct / 100.0
             else:
-                state["pendingAnnounceMsg"] = "La tapparella e' gia' aperta"
+                state["pendingAnnounceMsg"] = "The blind is already open"
 
         elif path == "/BLIND_CLOSE":
             if is_blind_closing_locked():
-                state["pendingAnnounceMsg"] = "Tapparella bloccata: finestra di sveglia attiva"
+                state["pendingAnnounceMsg"] = "Blind locked: alarm window active"
             else:
                 cur_pos = current_blind_position()
                 if cur_pos == -1:
@@ -396,11 +396,11 @@ def handle_routes(path, qs):
                     state["blindRunFullSec"] = float(state["blindCloseDuration"])
                     state["blindRunTotalSec"] = state["blindRunFullSec"] * remain_pct / 100.0
                 else:
-                    state["pendingAnnounceMsg"] = "La tapparella e' gia' chiusa"
+                    state["pendingAnnounceMsg"] = "The blind is already closed"
 
         elif path == "/BLIND_STOP":
             if is_blind_closing_locked():
-                state["pendingAnnounceMsg"] = "Tapparella bloccata: finestra di sveglia attiva"
+                state["pendingAnnounceMsg"] = "Blind locked: alarm window active"
             else:
                 if state["blindManualActive"]:
                     state["blindPositionPct"] = current_blind_position()
@@ -409,7 +409,7 @@ def handle_routes(path, qs):
 
         elif path == "/BLIND_FORCE_POS":
             if is_blind_closing_locked():
-                state["pendingAnnounceMsg"] = "Tapparella bloccata: finestra di sveglia attiva"
+                state["pendingAnnounceMsg"] = "Blind locked: alarm window active"
             else:
                 pos = qint(qs, "pos")
                 if pos is not None:
@@ -801,9 +801,9 @@ def render_firmware_card(pin_param, schedule_locked):
             html.append("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" "
                          "disabled>UPDATE NOW</button>")
         else:
-            html.append("<a href=\"/OTA_APPLY?%s\" onclick=\"return confirm('Aggiornare il firmware ora? "
-                         "Il sistema si bloccherà per circa un minuto e poi il dispositivo si "
-                         "riavvierà.')\">" % pin_param)
+            html.append("<a href=\"/OTA_APPLY?%s\" onclick=\"return confirm('Update firmware now? "
+                         "The system will freeze for about a minute and then the device will "
+                         "reboot.')\">" % pin_param)
             html.append("<button class=\"btn btn-manual\">UPDATE NOW</button></a>")
     else:
         html.append("<p style=\"color:#8e8e93;font-size:0.85rem;margin:10px 0 0\">Firmware up to date</p>")
@@ -836,7 +836,7 @@ def render_status_card(pin_param):
 def render_dashboard(pin_param, schedule_locked):
     hp = "<input type=\"hidden\" name=\"pin\" value=\"%s\">" % pin_param
     html = []
-    html.append("<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+    html.append("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
     html.append("<style>" + DASHBOARD_CSS + "</style>")
 
     html.append("<script>")

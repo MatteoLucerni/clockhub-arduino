@@ -6,7 +6,7 @@ const int MOTOR_ENA = 9;
 const int MOTOR_IN1 = 8;
 const int MOTOR_IN2 = 6;
 const unsigned long DUCKDNS_INTERVAL = 300000;
-const unsigned long OTA_CHECK_INTERVAL = 6UL * 60UL * 60UL * 1000UL; // 6h
+const unsigned long OTA_CHECK_INTERVAL = 30UL * 60UL * 1000UL; // 30min
 
 struct DaySetting {
   bool active;
