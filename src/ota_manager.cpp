@@ -66,41 +66,53 @@ void checkForUpdateIfNeeded() {
 bool startOtaUpdate() {
   OTAUpdate ota;
 
+  Serial.println("[OTA] begin()..."); Serial.flush();
   int ret = ota.begin();
+  Serial.println("[OTA] begin() -> " + String(ret)); Serial.flush();
   if (ret != OTAUpdate::OTA_ERROR_NONE) {
     otaErrorMsg = "OTA begin failed (" + String(ret) + ")";
     otaState = OTA_ERROR;
     return false;
   }
 
+  Serial.println("[OTA] setCACert()..."); Serial.flush();
   ret = ota.setCACert(root_ca);
+  Serial.println("[OTA] setCACert() -> " + String(ret)); Serial.flush();
   if (ret != OTAUpdate::OTA_ERROR_NONE) {
     otaErrorMsg = "OTA CA cert failed (" + String(ret) + ")";
     otaState = OTA_ERROR;
     return false;
   }
 
+  Serial.println("[OTA] download()..."); Serial.flush();
   int size = ota.download(OTA_FIRMWARE_URL);
+  Serial.println("[OTA] download() -> " + String(size)); Serial.flush();
   if (size <= 0) {
     otaErrorMsg = "OTA download failed (" + String(size) + ")";
     otaState = OTA_ERROR;
     return false;
   }
 
+  Serial.println("[OTA] verify()..."); Serial.flush();
   ret = ota.verify();
+  Serial.println("[OTA] verify() -> " + String(ret)); Serial.flush();
   if (ret != OTAUpdate::OTA_ERROR_NONE) {
     otaErrorMsg = "OTA verify failed (" + String(ret) + ")";
     otaState = OTA_ERROR;
     return false;
   }
 
+  Serial.println("[OTA] update()..."); Serial.flush();
   ret = ota.update();
+  Serial.println("[OTA] update() -> " + String(ret)); Serial.flush();
   if (ret != OTAUpdate::OTA_ERROR_NONE) {
     otaErrorMsg = "OTA update failed (" + String(ret) + ")";
     otaState = OTA_ERROR;
     return false;
   }
 
+  Serial.println("[OTA] reset()..."); Serial.flush();
   ota.reset(); // Reboots the device into the new firmware; does not return.
+  Serial.println("[OTA] reset() returned (unexpected!)"); Serial.flush();
   return true;
 }
