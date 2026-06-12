@@ -511,11 +511,26 @@ DASHBOARD_CSS = (
     ".prow input[type=range]{flex:1;min-width:0;height:28px;cursor:pointer;}"
     ".pval{width:38px;font-size:0.9rem;font-weight:bold;color:#007aff;text-align:right;flex-shrink:0;}"
     ".devcard{border:2px dashed #ff9500;}"
+    ".switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;}"
+    ".switch input{opacity:0;width:0;height:0;}"
+    ".switch .slider{position:absolute;top:0;left:0;right:0;bottom:0;background-color:#ccc;"
+    "transition:.2s;border-radius:26px;cursor:pointer;}"
+    ".switch .slider:before{position:absolute;content:'';height:20px;width:20px;left:3px;bottom:3px;"
+    "background-color:#fff;transition:.2s;border-radius:50%;}"
+    ".switch input:checked+.slider{background-color:#34c759;}"
+    ".switch input:checked+.slider:before{transform:translateX(20px);}"
+    ".switch input:disabled+.slider{opacity:.5;cursor:not-allowed;}"
 )
 
 
 def checked(b):
     return "checked" if b else ""
+
+
+def toggle_switch(name, is_checked, disabled, extra_style=""):
+    style_attr = (" style=\"%s\"" % extra_style) if extra_style else ""
+    return ("<label class=\"switch\"%s><input type=\"checkbox\" name=\"%s\" %s%s>"
+            "<span class=\"slider\"></span></label>" % (style_attr, name, checked(is_checked), disabled))
 
 
 def render_pin_page(error_msg="", locked=False):
@@ -634,8 +649,7 @@ def render_schedule_card(schedule_locked):
               % (i, sched["hour"], disabled)
             + "<input type=\"number\" name=\"m%d\" min=\"0\" max=\"59\" value=\"%d\"%s>"
               % (i, sched["minute"], disabled)
-            + "<input type=\"checkbox\" name=\"a%d\" %s style=\"width:20px;height:20px;margin-left:8px\"%s>"
-              % (i, checked(sched["active"]), disabled)
+            + toggle_switch("a%d" % i, sched["active"], disabled, "margin-left:8px")
             + "</div></div>")
     html.append("</div>")
     return "".join(html)
@@ -644,29 +658,26 @@ def render_schedule_card(schedule_locked):
 def render_settings_card(schedule_locked):
     disabled = " disabled" if schedule_locked else ""
     return ("<div class=\"card\"><h2>Settings</h2>"
-            "<div class=\"row\"><span>System Enabled</span>"
-            "<input type=\"checkbox\" name=\"en\" %s style=\"width:20px;height:20px\"%s></div>"
-            "</div>" % (checked(state["globalEnabled"]), disabled))
+            "<div class=\"row\"><span>System Enabled</span>%s</div>"
+            "</div>" % toggle_switch("en", state["globalEnabled"], disabled))
 
 
 def render_pump_card(schedule_locked):
     disabled = " disabled" if schedule_locked else ""
     return ("<div class=\"card\"><h2>Pump Settings</h2>"
-            "<div class=\"row\"><span>Enabled</span>"
-            "<input type=\"checkbox\" name=\"pen\" %s style=\"width:20px;height:20px\"%s></div>"
+            "<div class=\"row\"><span>Enabled</span>%s</div>"
             "<div class=\"row\"><span>Duration (sec)</span>"
             "<input type=\"number\" name=\"dur\" value=\"%d\"%s></div>"
-            "</div>" % (checked(state["pumpEnabled"]), disabled, state["runDuration"], disabled))
+            "</div>" % (toggle_switch("pen", state["pumpEnabled"], disabled), state["runDuration"], disabled))
 
 
 def render_light_card(schedule_locked):
     disabled = " disabled" if schedule_locked else ""
     return ("<div class=\"card\"><h2>Light Settings</h2>"
-            "<div class=\"row\"><span>Enabled</span>"
-            "<input type=\"checkbox\" name=\"len\" %s style=\"width:20px;height:20px\"%s></div>"
+            "<div class=\"row\"><span>Enabled</span>%s</div>"
             "<div class=\"row\"><span>Lead Time (minutes)</span>"
             "<input type=\"number\" name=\"lead\" value=\"%d\"%s></div>"
-            "</div>" % (checked(state["lightEnabled"]), disabled, state["lightLeadMinutes"], disabled))
+            "</div>" % (toggle_switch("len", state["lightEnabled"], disabled), state["lightLeadMinutes"], disabled))
 
 
 def render_sleep_card(hp):
@@ -746,9 +757,8 @@ def render_blind_settings_card(schedule_locked):
     disabled = " disabled" if schedule_locked else ""
     html = []
     html.append("<div class=\"card\"><h2>Blind Settings</h2>")
-    html.append("<div class=\"row\"><span>Enabled</span>"
-                 "<input type=\"checkbox\" name=\"ben\" %s style=\"width:20px;height:20px\"%s></div>"
-                 % (checked(state["blindEnabled"]), disabled))
+    html.append("<div class=\"row\"><span>Enabled</span>%s</div>"
+                 % toggle_switch("ben", state["blindEnabled"], disabled))
     html.append("<div class=\"row\"><span>Open Lead Time (min)</span>"
                  "<input type=\"number\" name=\"blead\" value=\"%d\" min=\"0\"%s></div>"
                  % (state["blindLeadMinutes"], disabled))
