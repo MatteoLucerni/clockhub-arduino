@@ -3,9 +3,24 @@
 # Runs automatically before every build.
 
 import os
+import subprocess
 import sys
 
 Import("env")
+
+
+def get_firmware_version():
+    fw_version = os.environ.get("FW_VERSION")
+    if fw_version:
+        return fw_version.strip()
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+        )
+        return sha.decode().strip()
+    except Exception:
+        return "dev"
 
 
 def generate_config(env_obj):
@@ -102,6 +117,9 @@ def generate_config(env_obj):
         "#define GATEWAY_IP_ARGS  {}".format(ip_to_args(values["GATEWAY_IP"])),
         "#define SUBNET_ARGS      {}".format(ip_to_args(values["SUBNET_MASK"])),
         "#define DNS_IP_ARGS      {}".format(ip_to_args(values["DNS_IP"])),
+        "",
+        "// Firmware version (short git SHA, set by CI via FW_VERSION env var)",
+        '#define FIRMWARE_VERSION "{}"'.format(get_firmware_version()),
     ]
 
     with open(config_h, "w") as f:

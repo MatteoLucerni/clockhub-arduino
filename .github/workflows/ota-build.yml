@@ -1,0 +1,57 @@
+name: OTA Build & Publish
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write .env from secret
+        env:
+          DOTENV_CONTENTS: ${{ secrets.DOTENV_CONTENTS }}
+        run: printf '%s\n' "$DOTENV_CONTENTS" > .env
+
+      - name: Set firmware version
+        run: echo "FW_VERSION=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO and OTA tooling deps
+        run: pip install platformio crccheck
+
+      - name: Build firmware
+        run: pio run -e uno_r4_wifi
+
+      - name: Convert to .ota
+        working-directory: tools/ota_tools
+        run: |
+          python3 lzss.py --encode ../../.pio/build/uno_r4_wifi/firmware.bin ../../firmware.lzss
+          python3 bin2ota.py UNOR4WIFI ../../firmware.lzss ../../firmware.ota
+
+      - name: Write version marker
+        run: printf '%s' "$FW_VERSION" > version.txt
+
+      - name: Publish to ota-releases branch
+        run: |
+          rm -rf /tmp/ota-release
+          mkdir -p /tmp/ota-release
+          cp firmware.ota version.txt /tmp/ota-release/
+          cd /tmp/ota-release
+          git init -q
+          git checkout -q -b ota-releases
+          git add firmware.ota version.txt
+          git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "OTA release $FW_VERSION"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push -q --force origin ota-releases

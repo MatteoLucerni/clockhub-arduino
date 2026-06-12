@@ -3,6 +3,8 @@
 #include "scheduler.h"
 #include "storage.h"
 #include "time_utils.h"
+#include "ota_manager.h"
+#include "config.h"
 #include <Arduino.h>
 
 static int pinFailCount = 0;
@@ -183,6 +185,19 @@ static void handleRoutes(const String& request) {
       showBedTimes = true;
     }
   }
+  else if (request.indexOf("GET /OTA_CHECK") >= 0) {
+    lastOtaCheck = 0;
+    checkForUpdateIfNeeded();
+  }
+  else if (request.indexOf("GET /OTA_APPLY") >= 0) {
+    if (!isScheduleLocked() && !blindManualActive) {
+      startOtaUpdate();
+    }
+  }
+  else if (request.indexOf("GET /OTA_DISMISS") >= 0) {
+    otaState = OTA_IDLE;
+    otaErrorMsg = "";
+  }
 }
 
 static void renderScheduleCard(WiFiClient& client, bool scheduleLocked) {
@@ -311,6 +326,29 @@ static void renderBlindSettingsCard(WiFiClient& client, bool scheduleLocked) {
   client.println("</div>");
 }
 
+static void renderFirmwareCard(WiFiClient& client, const String& pinParam, bool scheduleLocked) {
+  client.println("<div class=\"card\"><h2>Firmware</h2>");
+  client.println("<div class=\"row\"><span>Current version</span><b>" + String(FIRMWARE_VERSION) + "</b></div>");
+
+  if (otaState == OTA_ERROR) {
+    client.println("<div class=\"error-msg\" style=\"margin:15px 0\">" + otaErrorMsg + "</div>");
+    client.println("<a href=\"/OTA_DISMISS?" + pinParam + "\"><button class=\"btn btn-stop\">Dismiss</button></a>");
+  } else if (otaUpdateAvailable) {
+    client.println("<div class=\"row\"><span>Latest version</span><b style=\"color:#34c759\">" + otaLatestVersion + "</b></div>");
+    if (scheduleLocked || blindManualActive) {
+      client.println("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" disabled>UPDATE NOW</button>");
+    } else {
+      client.println("<a href=\"/OTA_APPLY?" + pinParam + "\" onclick=\"return confirm('Aggiornare il firmware ora? Il sistema si bloccherà per circa un minuto e poi il dispositivo si riavvierà.')\">");
+      client.println("<button class=\"btn btn-manual\">UPDATE NOW</button></a>");
+    }
+  } else {
+    client.println("<p style=\"color:#8e8e93;font-size:0.85rem;margin:10px 0 0\">Firmware up to date</p>");
+  }
+
+  client.println("<a href=\"/OTA_CHECK?" + pinParam + "\"><button class=\"btn btn-stop\" style=\"margin-top:8px\">Check for updates</button></a>");
+  client.println("</div>");
+}
+
 static void renderStatusCard(WiFiClient& client, const String& pinParam) {
   client.print("<div class=\"card\"><h2>Status</h2>"
     + String("<p>") + daysOfWeek[timeClient.getDay()] + ", " + timeClient.getFormattedTime() + "</p>"
@@ -361,6 +399,7 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   client.println("</div></form>");
   renderSleepCard(client, hp);
   renderBlindCard(client, pinParam);
+  renderFirmwareCard(client, pinParam, scheduleLocked);
   renderStatusCard(client, pinParam);
 }
 

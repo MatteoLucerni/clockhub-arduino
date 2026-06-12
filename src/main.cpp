@@ -10,6 +10,7 @@
 #include "scheduler.h"
 #include "web_server.h"
 #include "time_utils.h"
+#include "ota_manager.h"
 
 const char ssid[]       = WIFI_SSID;
 const char pass[]       = WIFI_PASS;
@@ -46,6 +47,12 @@ bool showBedTimes = false;
 unsigned long lastDuckDNSUpdate = 0;
 int           currentUTCOffset  = 3600;
 
+OtaState      otaState = OTA_IDLE;
+bool          otaUpdateAvailable = false;
+String        otaLatestVersion = "";
+String        otaErrorMsg = "";
+unsigned long lastOtaCheck = 0;
+
 const char* daysOfWeek[] = {
   "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 };
@@ -73,6 +80,7 @@ void loop() {
   currentUTCOffset = getItalyUTCOffset(utcEpoch);
   timeClient.setTimeOffset(currentUTCOffset);
   updateDuckDNSIfNeeded();
+  checkForUpdateIfNeeded();
   handleWebRequest();
   if (pendingAnnounceMsg.length() > 0) {
     announceVoiceMonkey(pendingAnnounceMsg.c_str());

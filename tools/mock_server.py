@@ -107,6 +107,17 @@ state = {
 
     # Dev clock offset (seconds added to real time)
     "timeOffsetSec": 0,
+
+    # Firmware / OTA (mirrors ota_manager.cpp + globals.h)
+    "firmwareVersion": "dev",
+    "otaState": "idle",  # "idle" | "error"
+    "otaUpdateAvailable": False,
+    "otaLatestVersion": "",
+    "otaErrorMsg": "",
+
+    # Dev-only OTA simulation toggles
+    "otaSimulateAvailable": False,
+    "otaSimulateFailure": False,
 }
 
 pin_fail_count = 0
@@ -441,6 +452,35 @@ def handle_routes(path, qs):
         elif path == "/DEV_RESET_TIME":
             state["timeOffsetSec"] = 0
 
+        elif path == "/DEV_OTA_TOGGLE_AVAILABLE":
+            state["otaSimulateAvailable"] = not state["otaSimulateAvailable"]
+
+        elif path == "/DEV_OTA_TOGGLE_FAILURE":
+            state["otaSimulateFailure"] = not state["otaSimulateFailure"]
+
+        elif path == "/OTA_CHECK":
+            if state["otaSimulateAvailable"]:
+                state["otaUpdateAvailable"] = True
+                state["otaLatestVersion"] = state["firmwareVersion"] + "-new"
+            else:
+                state["otaUpdateAvailable"] = False
+                state["otaLatestVersion"] = ""
+
+        elif path == "/OTA_APPLY":
+            if not is_schedule_locked() and not state["blindManualActive"]:
+                if state["otaSimulateFailure"]:
+                    state["otaState"] = "error"
+                    state["otaErrorMsg"] = "OTA download failed (-1) [simulated]"
+                else:
+                    state["firmwareVersion"] = state["otaLatestVersion"]
+                    state["otaUpdateAvailable"] = False
+                    state["otaLatestVersion"] = ""
+                    state["otaState"] = "idle"
+
+        elif path == "/OTA_DISMISS":
+            state["otaState"] = "idle"
+            state["otaErrorMsg"] = ""
+
 
 # --------------------------------------------------------------------------
 # HTML rendering (port of web_server.cpp renderers)
@@ -563,6 +603,22 @@ def render_dev_card(pin_param):
     html.append("</div>")
     html.append("<p style=\"font-size:0.72rem;color:#999;margin:8px 0 0\">Quick jumps are relative to "
                  "<b>today's</b> configured alarm time.</p>")
+
+    html.append("<div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;justify-content:center\">")
+    html.append("<a href=\"/DEV_OTA_TOGGLE_AVAILABLE?%s\"><button type=\"button\" class=\"btn\" "
+                 "style=\"width:auto;margin:0;padding:8px 12px;background:%s\">Simulate update available: %s"
+                 "</button></a>" % (pin_param,
+                                     "#34c759" if state["otaSimulateAvailable"] else "#eee",
+                                     "ON" if state["otaSimulateAvailable"] else "OFF"))
+    html.append("<a href=\"/DEV_OTA_TOGGLE_FAILURE?%s\"><button type=\"button\" class=\"btn\" "
+                 "style=\"width:auto;margin:0;padding:8px 12px;background:%s\">Simulate apply failure: %s"
+                 "</button></a>" % (pin_param,
+                                     "#ff3b30" if state["otaSimulateFailure"] else "#eee",
+                                     "ON" if state["otaSimulateFailure"] else "OFF"))
+    html.append("</div>")
+    html.append("<p style=\"font-size:0.72rem;color:#999;margin:8px 0 0\">These two toggles affect the "
+                 "Firmware card's Check/Update buttons below.</p>")
+
     html.append("</div>")
     return "".join(html)
 
@@ -720,6 +776,34 @@ def render_blind_settings_card(schedule_locked):
     return "".join(html)
 
 
+def render_firmware_card(pin_param, schedule_locked):
+    html = []
+    html.append("<div class=\"card\"><h2>Firmware</h2>")
+    html.append("<div class=\"row\"><span>Current version</span><b>%s</b></div>" % state["firmwareVersion"])
+
+    if state["otaState"] == "error":
+        html.append("<div class=\"error-msg\" style=\"margin:15px 0\">%s</div>" % state["otaErrorMsg"])
+        html.append("<a href=\"/OTA_DISMISS?%s\"><button class=\"btn btn-stop\">Dismiss</button></a>" % pin_param)
+    elif state["otaUpdateAvailable"]:
+        html.append("<div class=\"row\"><span>Latest version</span>"
+                     "<b style=\"color:#34c759\">%s</b></div>" % state["otaLatestVersion"])
+        if schedule_locked or state["blindManualActive"]:
+            html.append("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" "
+                         "disabled>UPDATE NOW</button>")
+        else:
+            html.append("<a href=\"/OTA_APPLY?%s\" onclick=\"return confirm('Aggiornare il firmware ora? "
+                         "Il sistema si bloccherà per circa un minuto e poi il dispositivo si "
+                         "riavvierà.')\">" % pin_param)
+            html.append("<button class=\"btn btn-manual\">UPDATE NOW</button></a>")
+    else:
+        html.append("<p style=\"color:#8e8e93;font-size:0.85rem;margin:10px 0 0\">Firmware up to date</p>")
+
+    html.append("<a href=\"/OTA_CHECK?%s\"><button class=\"btn btn-stop\" "
+                 "style=\"margin-top:8px\">Check for updates</button></a>" % pin_param)
+    html.append("</div>")
+    return "".join(html)
+
+
 def render_status_card(pin_param):
     pump_running = state["manualOverride"] or (time.time() < state["pumpOnUntil"])
     html = []
@@ -773,6 +857,7 @@ def render_dashboard(pin_param, schedule_locked):
     html.append("</div></form>")
     html.append(render_sleep_card(hp))
     html.append(render_blind_card(pin_param))
+    html.append(render_firmware_card(pin_param, schedule_locked))
     html.append(render_status_card(pin_param))
     return "".join(html)
 

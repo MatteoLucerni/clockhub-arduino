@@ -45,5 +45,13 @@ extern bool showBedTimes;
 extern unsigned long lastDuckDNSUpdate;
 extern int currentUTCOffset;
 
+// OTA update state
+enum OtaState { OTA_IDLE, OTA_ERROR };
+extern OtaState otaState;
+extern bool otaUpdateAvailable;
+extern String otaLatestVersion;
+extern String otaErrorMsg;
+extern unsigned long lastOtaCheck;
+
 // Day names
 extern const char* daysOfWeek[];
