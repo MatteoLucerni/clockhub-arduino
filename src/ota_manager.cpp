@@ -66,6 +66,8 @@ void checkForUpdateIfNeeded() {
 bool startOtaUpdate() {
   OTAUpdate ota;
 
+  modem.debug(Serial, 2);
+
   Serial.println("[OTA] begin()..."); Serial.flush();
   int ret = ota.begin();
   Serial.println("[OTA] begin() -> " + String(ret)); Serial.flush();
