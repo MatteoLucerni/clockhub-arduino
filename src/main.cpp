@@ -72,7 +72,6 @@ void setup() {
   setupWiFi();
   updateDuckDNS();
   lastDuckDNSUpdate = millis();
-  // lastDuckDNSUpdate = millis(); test
 }
 
 void loop() {
