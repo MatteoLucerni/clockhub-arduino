@@ -10,6 +10,7 @@ void loadConfig() {
   EEPROM.get(0, sysConfig);
   if (sysConfig.checkKey != 12352) {
     sysConfig.globalEnabled = true;
+    sysConfig.pumpEnabled = true;
     sysConfig.runDuration = 10;
     sysConfig.lightEnabled = true;
     sysConfig.lightLeadMinutes = 30;

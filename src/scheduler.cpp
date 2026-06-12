@@ -185,7 +185,7 @@ void runAlarmLogic() {
       }
 
       // Trigger pump (water alarm)
-      if (sysConfig.schedule[curDay].active && curTotal == almTotal) {
+      if (sysConfig.pumpEnabled && sysConfig.schedule[curDay].active && curTotal == almTotal) {
         if (!alarmTriggered) {
           digitalWrite(PUMP_PIN, HIGH);
           delay(sysConfig.runDuration * 1000);

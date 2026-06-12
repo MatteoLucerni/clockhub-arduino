@@ -15,6 +15,7 @@ struct DaySetting {
 
 struct Config {
   bool globalEnabled;
+  bool pumpEnabled;
   int runDuration;
   bool lightEnabled;
   int lightLeadMinutes;

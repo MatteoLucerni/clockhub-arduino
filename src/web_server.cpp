@@ -76,17 +76,18 @@ static void handleRoutes(const String& request) {
     if (!isScheduleLocked()) {
       String durVal = parseParam(request, "dur=");
       if (durVal.length() > 0) sysConfig.runDuration = durVal.toInt();
-      sysConfig.globalEnabled = (request.indexOf("en=") > 0);
+      sysConfig.globalEnabled = (request.indexOf("&en=") >= 0);
+      sysConfig.pumpEnabled = (request.indexOf("&pen=") >= 0);
       String leadVal = parseParam(request, "lead=");
       if (leadVal.length() > 0) sysConfig.lightLeadMinutes = leadVal.toInt();
-      sysConfig.lightEnabled = (request.indexOf("len=") > 0);
+      sysConfig.lightEnabled = (request.indexOf("&len=") >= 0);
       String bldLead = parseParam(request, "blead=");
       String bldOpen = parseParam(request, "bopen=");
       String bldClose = parseParam(request, "bclose=");
       if (bldLead.length() > 0)  sysConfig.blindLeadMinutes   = bldLead.toInt();
       if (bldOpen.length() > 0)  sysConfig.blindOpenDuration  = bldOpen.toInt();
       if (bldClose.length() > 0) sysConfig.blindCloseDuration = bldClose.toInt();
-      sysConfig.blindEnabled = (request.indexOf("ben=") > 0);
+      sysConfig.blindEnabled = (request.indexOf("&ben=") >= 0);
       for (int i = 0; i < 6; i++) {
         String pVal = parseParam(request, "p" + String(i) + "=");
         if (pVal.length() > 0) sysConfig.motorSlowdown[i] = (uint8_t)constrain(pVal.toInt(), 0, 100);
@@ -200,8 +201,15 @@ static void renderScheduleCard(WiFiClient& client, bool scheduleLocked) {
 static void renderSettingsCard(WiFiClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Settings</h2>");
-  client.println("<div class=\"row\"><span>Pump Duration (sec)</span><input type=\"number\" name=\"dur\" value=\"" + String(sysConfig.runDuration) + "\"" + disabledAttr + "></div>"
-    + "<div class=\"row\"><span>System Enabled</span><input type=\"checkbox\" name=\"en\" " + String(sysConfig.globalEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>");
+  client.println("<div class=\"row\"><span>System Enabled</span><input type=\"checkbox\" name=\"en\" " + String(sysConfig.globalEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>");
+  client.println("</div>");
+}
+
+static void renderPumpCard(WiFiClient& client, bool scheduleLocked) {
+  String disabledAttr = scheduleLocked ? " disabled" : "";
+  client.println("<div class=\"card\"><h2>Pump Settings</h2>");
+  client.println("<div class=\"row\"><span>Enabled</span><input type=\"checkbox\" name=\"pen\" " + String(sysConfig.pumpEnabled ? "checked" : "") + " style=\"width:20px;height:20px\"" + disabledAttr + "></div>"
+    + "<div class=\"row\"><span>Duration (sec)</span><input type=\"number\" name=\"dur\" value=\"" + String(sysConfig.runDuration) + "\"" + disabledAttr + "></div>");
   client.println("</div>");
 }
 
@@ -345,6 +353,7 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   client.println("<form action=\"/SAVE_ALL\" method=\"GET\">" + hp);
   renderScheduleCard(client, scheduleLocked);
   renderSettingsCard(client, scheduleLocked);
+  renderPumpCard(client, scheduleLocked);
   renderLightCard(client, scheduleLocked);
   renderBlindSettingsCard(client, scheduleLocked);
   client.println("<div class=\"card\" style=\"padding:10px\">");
