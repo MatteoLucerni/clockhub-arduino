@@ -9,19 +9,25 @@ wireless ("OneTap OTA") firmware updates.
 - Board: Arduino UNO R4 WiFi (Renesas RA4M1 + ESP32-S3 WiFi co-processor)
 - PlatformIO env: `uno_r4_wifi` (platform `renesas-ra`, framework `arduino`)
 - PlatformIO executable: `C:\Users\Matteo\.platformio\penv\Scripts\pio.exe`
-- WiFi co-processor (ESP32-S3) connectivity firmware on this device is **0.6.0**
-  (updated 2026-06 via Arduino IDE), so both the blocking `download()` and the
-  non-blocking `startDownload()`/`downloadProgress()` OTA APIs are available.
-  **Critical:** `begin()`, `download()` and `update()` must all be given the same
-  destination path (we use `"/update.bin"`) — that's where the co-processor writes
-  the downloaded `.ota`. The no-argument variants give the download no storage
-  target: it fails with `Error::Modem` (-26) and **wedges the modem** (every later
-  AT command, including the web server's `AT+CLIENTSEND`, then fails — the "frozen
-  system" symptom). We use the **blocking** path-based sequence
-  `begin(path)`→`download(url,path)`→`verify()`→`update(path)`→`reset()` (single
-  `AT+OTADOWNLOAD`, 60s modem timeout, no polling); on failure it returns a clean
-  error code. See the library's `OTA` / `OTANonBlocking` examples for the canonical
-  pattern.
+- WiFi co-processor (ESP32-S3) connectivity firmware **must stay at 0.5.2** to
+  match the PlatformIO toolchain. `framework-arduinorenesas-uno` **1.5.1** is the
+  latest published (renesas-ra platform 1.8.0), and its OTAUpdate/Modem libraries
+  target firmware **0.5.2** (`WIFI_FIRMWARE_LATEST_VERSION` in `WiFiS3/WiFi.h`).
+  **Do NOT upgrade the board firmware past 0.5.2** (e.g. to 0.6.0 via Arduino IDE):
+  `download()`/`verify()` still work, but the firmware-transfer step `update()`
+  speaks the old protocol to the newer firmware and dies with an ESP32
+  `uart_get_buffered_data_len(...) uart driver error`, never completing the flash.
+  If it ever gets bumped, downgrade back to 0.5.2 in Arduino IDE (Tools → Firmware
+  Updater) until PlatformIO ships a framework that targets the newer firmware.
+- OTA call requirements (mirror the library's `OTA` / `OTANonBlocking` examples):
+  `begin()`, `download()` and `update()` must all receive the **same destination
+  path** (`"/update.bin"`) — where the co-processor writes the downloaded `.ota`.
+  The no-arg variants give the download no storage target: it fails with
+  `Error::Modem` (-26) and wedges the modem. Also, `/OTA_APPLY` must send its HTTP
+  response and **close the client socket before** starting the OTA: `update()`
+  streams firmware over the same RA4M1↔ESP32 UART, so an open socket triggers the
+  same UART driver error. We use the **blocking** sequence
+  `begin(path)`→`download(url,path)`→`verify()`→`update(path)`→`reset()`.
 
 ### Common commands
 
