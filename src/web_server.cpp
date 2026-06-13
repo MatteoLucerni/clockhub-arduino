@@ -478,14 +478,16 @@ void handleWebRequest() {
               renderDashboard(client, hp, pinParam, isScheduleLocked());
               break;
             }
-            // Send a self-reloading "updating" page and CLOSE the socket BEFORE
-            // starting the OTA. update() streams the firmware to the RA4M1 over the
-            // same RA4M1<->ESP32 UART that serves this HTTP socket; leaving the
-            // socket open during the transfer triggers a "uart driver error" and
-            // aborts the update. Closing first also gives the browser a real
-            // response instead of retrying /OTA_APPLY (which caused an apply/reboot
-            // loop). On success startOtaUpdate() reboots and never returns; on
-            // failure it sets otaState=OTA_ERROR, shown when this page reloads.
+            // Send a self-reloading "updating" page, close this socket, then free
+            // the ESP32's other sockets (the :80 listener and the NTP UDP socket)
+            // before starting the OTA. The OTAUpdate examples run the OTA in a clean
+            // network state right after WiFi connect; with our web server and NTP
+            // sockets still open, the apply step (which resets the modem) hangs.
+            // Closing the browser socket first also gives it a real response instead
+            // of retrying /OTA_APPLY (which caused a reboot loop). On success
+            // startOtaUpdate() reboots and never returns; on failure we restore the
+            // services so the dashboard keeps working (the OTA_ERROR state is then
+            // shown when this page reloads).
             client.println("HTTP/1.1 200 OK");
             client.println("Content-type:text/html");
             client.println("Connection: close");
@@ -500,8 +502,14 @@ void handleWebRequest() {
               "</body></html>");
             client.flush();
             client.stop();
-            delay(100); // let the socket teardown settle before the OTA transfer
-            startOtaUpdate();
+            server.end();     // free the :80 listening socket
+            ntpUDP.stop();    // free the NTP UDP socket
+            delay(100);       // let the socket teardown settle before the OTA
+            if (!startOtaUpdate()) {
+              // OTA failed (success reboots the device) — restore network services.
+              server.begin();
+              timeClient.begin();
+            }
             return;
           }
 

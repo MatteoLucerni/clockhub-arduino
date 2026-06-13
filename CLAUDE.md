@@ -23,10 +23,16 @@ wireless ("OneTap OTA") firmware updates.
   `begin()`, `download()` and `update()` must all receive the **same destination
   path** (`"/update.bin"`) — where the co-processor writes the downloaded `.ota`.
   The no-arg variants give the download no storage target: it fails with
-  `Error::Modem` (-26) and wedges the modem. Also, `/OTA_APPLY` must send its HTTP
-  response and **close the client socket before** starting the OTA: `update()`
-  streams firmware over the same RA4M1↔ESP32 UART, so an open socket triggers the
-  same UART driver error. We use the **blocking** sequence
+  `Error::Modem` (-26) and wedges the modem. The examples also run the OTA in a
+  **clean network state** (right after WiFi connect, nothing else open); our
+  `/OTA_APPLY` handler replicates that — it sends its HTTP response, **closes the
+  browser socket** (which also avoids a retry/reboot loop), then **`server.end()` +
+  `ntpUDP.stop()`** before calling the OTA, restoring them (`server.begin()` /
+  `timeClient.begin()`) only on failure. With the :80 listener or NTP UDP socket
+  still open, the apply step (which resets the modem) hangs. NB: the
+  `uart_get_buffered_data_len(...) uart driver error` the ESP32 logs during the
+  apply is **benign noise** — it shows up in the stock OTA example too, so don't
+  chase it. We use the blocking sequence
   `begin(path)`→`download(url,path)`→`verify()`→`update(path)`→`reset()`.
 
 ### Common commands
