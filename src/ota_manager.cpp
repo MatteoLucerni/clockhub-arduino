@@ -90,13 +90,22 @@ bool startOtaUpdate() {
     return false;
   }
 
-  Serial.println("[OTA] download()..."); Serial.flush();
-  int size = ota.download(OTA_TEST_URL); // TEMP DIAGNOSTIC: small file instead of OTA_FIRMWARE_URL
-  Serial.println("[OTA] download() -> " + String(size)); Serial.flush();
+  Serial.println("[OTA] startDownload()..."); Serial.flush();
+  int size = ota.startDownload(OTA_TEST_URL); // TEMP DIAGNOSTIC: non-blocking start, same small test file
+  Serial.println("[OTA] startDownload() -> " + String(size)); Serial.flush();
   if (size <= 0) {
     otaErrorMsg = "OTA download failed (" + String(size) + ")";
     otaState = OTA_ERROR;
     return false;
+  }
+
+  Serial.println("[OTA] downloadProgress() poll..."); Serial.flush();
+  int progress = 0;
+  unsigned long pollStart = millis();
+  while (progress >= 0 && progress < size && millis() - pollStart < 30000) {
+    progress = ota.downloadProgress();
+    Serial.println("[OTA] downloadProgress() -> " + String(progress)); Serial.flush();
+    delay(200);
   }
 
   Serial.println("[OTA] verify()..."); Serial.flush();
