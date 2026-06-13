@@ -9,6 +9,10 @@ static const char* OTA_HOST = "raw.githubusercontent.com";
 static const char* OTA_VERSION_PATH = "/MatteoLucerni/clockhub-arduino/ota-releases/version.txt";
 static const char* OTA_FIRMWARE_URL = "https://raw.githubusercontent.com/MatteoLucerni/clockhub-arduino/ota-releases/firmware.ota";
 
+// TEMP DIAGNOSTIC: tiny file (7 bytes) on the same host/CDN/TLS chain as firmware.ota,
+// used to check whether AT+OTADWNLD hangs regardless of payload size.
+static const char* OTA_TEST_URL = "https://raw.githubusercontent.com/MatteoLucerni/clockhub-arduino/ota-releases/version.txt";
+
 // Performs a simple HTTPS GET and returns the response body (Content-Length aware).
 static String httpsGet(const char* host, const char* path) {
   WiFiSSLClient client;
@@ -87,7 +91,7 @@ bool startOtaUpdate() {
   }
 
   Serial.println("[OTA] download()..."); Serial.flush();
-  int size = ota.download(OTA_FIRMWARE_URL);
+  int size = ota.download(OTA_TEST_URL); // TEMP DIAGNOSTIC: small file instead of OTA_FIRMWARE_URL
   Serial.println("[OTA] download() -> " + String(size)); Serial.flush();
   if (size <= 0) {
     otaErrorMsg = "OTA download failed (" + String(size) + ")";
