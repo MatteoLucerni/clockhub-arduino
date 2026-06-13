@@ -86,8 +86,12 @@ bool startOtaUpdate() {
     return false;
   }
 
+  // The blocking ota.download() (AT+OTADOWNLOAD) never returns and wedges the
+  // modem on connectivity firmware 0.6.0 when fetching from raw.githubusercontent.com,
+  // regardless of payload size. startDownload()/downloadProgress() (AT+OTADOWNLOADSTART,
+  // requires modem fw >= 0.5.0) works correctly.
   Serial.println("[OTA] startDownload()..."); Serial.flush();
-  int size = ota.startDownload(OTA_FIRMWARE_URL); // non-blocking start (requires modem fw >= 0.5.0)
+  int size = ota.startDownload(OTA_FIRMWARE_URL);
   Serial.println("[OTA] startDownload() -> " + String(size)); Serial.flush();
   if (size <= 0) {
     otaErrorMsg = "OTA download failed (" + String(size) + ")";
