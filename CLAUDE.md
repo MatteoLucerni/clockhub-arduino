@@ -9,10 +9,16 @@ wireless ("OneTap OTA") firmware updates.
 - Board: Arduino UNO R4 WiFi (Renesas RA4M1 + ESP32-S3 WiFi co-processor)
 - PlatformIO env: `uno_r4_wifi` (platform `renesas-ra`, framework `arduino`)
 - PlatformIO executable: `C:\Users\Matteo\.platformio\penv\Scripts\pio.exe`
-- WiFi co-processor firmware on this device is **0.4.1** — below the 0.5.0
-  threshold required for `OTAUpdate::startDownload()`/`downloadProgress()`.
-  Any OTA-related code must use the **blocking** `download()`/`verify()`/
-  `update()`/`reset()` sequence.
+- WiFi co-processor (ESP32-S3) connectivity firmware on this device is **0.6.0**
+  (updated 2026-06 via Arduino IDE). Although that is above the 0.5.0 threshold
+  where `OTAUpdate::startDownload()`/`downloadProgress()` become available, the
+  non-blocking path starves the modem's AT-command handler during the background
+  download: the first `downloadProgress()` poll times out with `Error::Modem`
+  (-26) and the modem stays wedged (every later AT command, including the web
+  server's `AT+CLIENTSEND`, then fails — the "frozen system" symptom). OTA code
+  must therefore use the **blocking** `download()`/`verify()`/`update()`/`reset()`
+  sequence: a single `AT+OTADOWNLOAD` with a 60s modem timeout, no polling. On
+  failure it returns a clean error code instead of wedging the modem.
 
 ### Common commands
 
