@@ -466,17 +466,8 @@ def handle_routes(path, qs):
                 state["otaUpdateAvailable"] = False
                 state["otaLatestVersion"] = ""
 
-        elif path == "/OTA_APPLY":
-            if not is_schedule_locked() and not state["blindManualActive"]:
-                if state["otaSimulateFailure"]:
-                    state["otaState"] = "error"
-                    state["otaErrorMsg"] = "OTA download failed (-1) [simulated]"
-                else:
-                    state["firmwareVersion"] = state["otaLatestVersion"]
-                    state["otaUpdateAvailable"] = False
-                    state["otaLatestVersion"] = ""
-                    state["otaState"] = "idle"
-
+        # NOTE: /OTA_APPLY is handled directly in do_GET() (it must send the
+        # "updating" page, not the dashboard), mirroring web_server.cpp.
         elif path == "/OTA_DISMISS":
             state["otaState"] = "idle"
             state["otaErrorMsg"] = ""
@@ -786,6 +777,20 @@ def render_blind_settings_card(schedule_locked):
     return "".join(html)
 
 
+def render_updating_page(pin_param):
+    # Mirrors the "updating" page web_server.cpp sends for /OTA_APPLY before the
+    # blocking OTA. The mock can't reboot, so the auto-reload just returns to the
+    # dashboard (which already reflects the simulated update result).
+    return ("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+            "<meta http-equiv=\"refresh\" content=\"75;url=/?pin=%s\">"
+            "<title>Updating...</title></head>"
+            "<body style=\"font-family:sans-serif;text-align:center;padding-top:40px\">"
+            "<h2>Firmware update in progress...</h2>"
+            "<p>The device is downloading and applying the new firmware, then it will reboot.</p>"
+            "<p>It may be unreachable for about a minute. This page reloads automatically.</p>"
+            "</body></html>" % pin_param)
+
+
 def render_firmware_card(pin_param, schedule_locked):
     html = []
     html.append("<div class=\"card\"><h2>Firmware</h2>")
@@ -802,8 +807,8 @@ def render_firmware_card(pin_param, schedule_locked):
                          "disabled>UPDATE NOW</button>")
         else:
             html.append("<a href=\"/OTA_APPLY?%s\" onclick=\"return confirm('Update firmware now? "
-                         "The system will freeze for about a minute and then the device will "
-                         "reboot.')\">" % pin_param)
+                         "The device will reboot and may be unreachable for about a minute. "
+                         "The page will reload automatically.')\">" % pin_param)
             html.append("<button class=\"btn btn-manual\">UPDATE NOW</button></a>")
     else:
         html.append("<p style=\"color:#8e8e93;font-size:0.85rem;margin:10px 0 0\">Firmware up to date</p>")
@@ -939,6 +944,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/CHECK_LOCK":
             self._send(200, "text/plain", "1" if is_schedule_locked() else "0",
+                       extra_headers={"Cache-Control": "no-store"})
+            return
+
+        if path == "/OTA_APPLY":
+            # Mirrors web_server.cpp: send the self-reloading "updating" page (and,
+            # on hardware, close the socket) BEFORE applying, instead of returning
+            # the dashboard.
+            if is_schedule_locked() or state["blindManualActive"]:
+                self._send(200, "text/html", render_dashboard(pin_param, is_schedule_locked()),
+                           extra_headers={"Cache-Control": "no-store"})
+                return
+            if state["otaSimulateFailure"]:
+                state["otaState"] = "error"
+                state["otaErrorMsg"] = "OTA download failed (-1) [simulated]"
+            else:
+                state["firmwareVersion"] = state["otaLatestVersion"]
+                state["otaUpdateAvailable"] = False
+                state["otaLatestVersion"] = ""
+                state["otaState"] = "idle"
+            self._send(200, "text/html", render_updating_page(pin_param),
                        extra_headers={"Cache-Control": "no-store"})
             return
 

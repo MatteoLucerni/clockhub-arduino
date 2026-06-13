@@ -195,11 +195,8 @@ static void handleRoutes(const String& request) {
     lastOtaCheck = 0;
     checkForUpdateIfNeeded();
   }
-  else if (request.indexOf("GET /OTA_APPLY") >= 0) {
-    if (!isScheduleLocked() && !blindManualActive) {
-      startOtaUpdate();
-    }
-  }
+  // NOTE: GET /OTA_APPLY is handled directly in handleWebRequest() (it must send
+  // its response and close the socket BEFORE the blocking OTA), not here.
   else if (request.indexOf("GET /OTA_DISMISS") >= 0) {
     otaState = OTA_IDLE;
     otaErrorMsg = "";
@@ -344,7 +341,7 @@ static void renderFirmwareCard(WiFiClient& client, const String& pinParam, bool 
     if (scheduleLocked || blindManualActive) {
       client.println("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" disabled>UPDATE NOW</button>");
     } else {
-      client.println("<a href=\"/OTA_APPLY?" + pinParam + "\" onclick=\"return confirm('Update firmware now? The system will freeze for about a minute and then the device will reboot.')\">");
+      client.println("<a href=\"/OTA_APPLY?" + pinParam + "\" onclick=\"return confirm('Update firmware now? The device will reboot and may be unreachable for about a minute. The page will reload automatically.')\">");
       client.println("<button class=\"btn btn-manual\">UPDATE NOW</button></a>");
     }
   } else {
@@ -474,6 +471,38 @@ void handleWebRequest() {
             client.println();
             client.print(isScheduleLocked() ? "1" : "0");
             break;
+          }
+
+          if (request.indexOf("GET /OTA_APPLY") >= 0) {
+            if (isScheduleLocked() || blindManualActive) {
+              renderDashboard(client, hp, pinParam, isScheduleLocked());
+              break;
+            }
+            // Send a self-reloading "updating" page and CLOSE the socket BEFORE
+            // starting the OTA. update() streams the firmware to the RA4M1 over the
+            // same RA4M1<->ESP32 UART that serves this HTTP socket; leaving the
+            // socket open during the transfer triggers a "uart driver error" and
+            // aborts the update. Closing first also gives the browser a real
+            // response instead of retrying /OTA_APPLY (which caused an apply/reboot
+            // loop). On success startOtaUpdate() reboots and never returns; on
+            // failure it sets otaState=OTA_ERROR, shown when this page reloads.
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+            client.println("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+              "<meta http-equiv=\"refresh\" content=\"75;url=/?" + pinParam + "\">"
+              "<title>Updating...</title></head>"
+              "<body style=\"font-family:sans-serif;text-align:center;padding-top:40px\">"
+              "<h2>Firmware update in progress...</h2>"
+              "<p>The device is downloading and applying the new firmware, then it will reboot.</p>"
+              "<p>It may be unreachable for about a minute. This page reloads automatically.</p>"
+              "</body></html>");
+            client.flush();
+            client.stop();
+            delay(100); // let the socket teardown settle before the OTA transfer
+            startOtaUpdate();
+            return;
           }
 
           handleRoutes(request);
