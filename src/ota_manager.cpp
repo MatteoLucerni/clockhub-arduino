@@ -9,10 +9,6 @@ static const char* OTA_HOST = "raw.githubusercontent.com";
 static const char* OTA_VERSION_PATH = "/MatteoLucerni/clockhub-arduino/ota-releases/version.txt";
 static const char* OTA_FIRMWARE_URL = "https://raw.githubusercontent.com/MatteoLucerni/clockhub-arduino/ota-releases/firmware.ota";
 
-// TEMP DIAGNOSTIC: tiny file (7 bytes) on the same host/CDN/TLS chain as firmware.ota,
-// used to check whether AT+OTADWNLD hangs regardless of payload size.
-static const char* OTA_TEST_URL = "https://raw.githubusercontent.com/MatteoLucerni/clockhub-arduino/ota-releases/version.txt";
-
 // Performs a simple HTTPS GET and returns the response body (Content-Length aware).
 static String httpsGet(const char* host, const char* path) {
   WiFiSSLClient client;
@@ -91,7 +87,7 @@ bool startOtaUpdate() {
   }
 
   Serial.println("[OTA] startDownload()..."); Serial.flush();
-  int size = ota.startDownload(OTA_TEST_URL); // TEMP DIAGNOSTIC: non-blocking start, same small test file
+  int size = ota.startDownload(OTA_FIRMWARE_URL); // non-blocking start (requires modem fw >= 0.5.0)
   Serial.println("[OTA] startDownload() -> " + String(size)); Serial.flush();
   if (size <= 0) {
     otaErrorMsg = "OTA download failed (" + String(size) + ")";
@@ -99,14 +95,24 @@ bool startOtaUpdate() {
     return false;
   }
 
+  modem.noDebug(); // avoid flooding Serial during progress polling
   Serial.println("[OTA] downloadProgress() poll..."); Serial.flush();
   int progress = 0;
+  int lastPrinted = -1;
   unsigned long pollStart = millis();
-  while (progress >= 0 && progress < size && millis() - pollStart < 30000) {
+  unsigned long lastHeartbeat = millis();
+  while (progress >= 0 && progress < size && millis() - pollStart < 180000) {
     progress = ota.downloadProgress();
-    Serial.println("[OTA] downloadProgress() -> " + String(progress)); Serial.flush();
+    if (progress != lastPrinted || millis() - lastHeartbeat > 5000) {
+      Serial.println("[OTA] downloadProgress() -> " + String(progress) + " / " + String(size));
+      Serial.flush();
+      lastPrinted = progress;
+      lastHeartbeat = millis();
+    }
     delay(200);
   }
+  modem.debug(Serial, 2);
+  Serial.println("[OTA] downloadProgress() final -> " + String(progress) + " / " + String(size)); Serial.flush();
 
   Serial.println("[OTA] verify()..."); Serial.flush();
   ret = ota.verify();
