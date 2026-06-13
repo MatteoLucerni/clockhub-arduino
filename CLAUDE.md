@@ -10,15 +10,18 @@ wireless ("OneTap OTA") firmware updates.
 - PlatformIO env: `uno_r4_wifi` (platform `renesas-ra`, framework `arduino`)
 - PlatformIO executable: `C:\Users\Matteo\.platformio\penv\Scripts\pio.exe`
 - WiFi co-processor (ESP32-S3) connectivity firmware on this device is **0.6.0**
-  (updated 2026-06 via Arduino IDE). Although that is above the 0.5.0 threshold
-  where `OTAUpdate::startDownload()`/`downloadProgress()` become available, the
-  non-blocking path starves the modem's AT-command handler during the background
-  download: the first `downloadProgress()` poll times out with `Error::Modem`
-  (-26) and the modem stays wedged (every later AT command, including the web
-  server's `AT+CLIENTSEND`, then fails — the "frozen system" symptom). OTA code
-  must therefore use the **blocking** `download()`/`verify()`/`update()`/`reset()`
-  sequence: a single `AT+OTADOWNLOAD` with a 60s modem timeout, no polling. On
-  failure it returns a clean error code instead of wedging the modem.
+  (updated 2026-06 via Arduino IDE), so both the blocking `download()` and the
+  non-blocking `startDownload()`/`downloadProgress()` OTA APIs are available.
+  **Critical:** `begin()`, `download()` and `update()` must all be given the same
+  destination path (we use `"/update.bin"`) — that's where the co-processor writes
+  the downloaded `.ota`. The no-argument variants give the download no storage
+  target: it fails with `Error::Modem` (-26) and **wedges the modem** (every later
+  AT command, including the web server's `AT+CLIENTSEND`, then fails — the "frozen
+  system" symptom). We use the **blocking** path-based sequence
+  `begin(path)`→`download(url,path)`→`verify()`→`update(path)`→`reset()` (single
+  `AT+OTADOWNLOAD`, 60s modem timeout, no polling); on failure it returns a clean
+  error code. See the library's `OTA` / `OTANonBlocking` examples for the canonical
+  pattern.
 
 ### Common commands
 
