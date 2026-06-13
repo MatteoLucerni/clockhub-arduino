@@ -2,12 +2,16 @@
 #include "globals.h"
 #include "config.h"
 #include "root_ca.h"
+#include "ota_diag_ca.h"
 #include <WiFiS3.h>
 #include <OTAUpdate.h>
 
 static const char* OTA_HOST = "raw.githubusercontent.com";
 static const char* OTA_VERSION_PATH = "/MatteoLucerni/clockhub-arduino/ota-releases/version.txt";
 static const char* OTA_FIRMWARE_URL = "https://raw.githubusercontent.com/MatteoLucerni/clockhub-arduino/ota-releases/firmware.ota";
+
+// TEMP DIAGNOSTIC: known-good 29KB .ota on CloudFront, from Arduino's official example.
+static const char* OTA_DIAG_URL = "https://downloads.arduino.cc/ota/UNOR4WIFI_Animation.ota";
 
 // Performs a simple HTTPS GET and returns the response body (Content-Length aware).
 static String httpsGet(const char* host, const char* path) {
@@ -78,7 +82,7 @@ bool startOtaUpdate() {
   }
 
   Serial.println("[OTA] setCACert()..."); Serial.flush();
-  ret = ota.setCACert(root_ca);
+  ret = ota.setCACert(diag_root_ca); // TEMP DIAGNOSTIC: CA for downloads.arduino.cc, not raw.githubusercontent.com
   Serial.println("[OTA] setCACert() -> " + String(ret)); Serial.flush();
   if (ret != OTAUpdate::OTA_ERROR_NONE) {
     otaErrorMsg = "OTA CA cert failed (" + String(ret) + ")";
@@ -91,7 +95,7 @@ bool startOtaUpdate() {
   // regardless of payload size. startDownload()/downloadProgress() (AT+OTADOWNLOADSTART,
   // requires modem fw >= 0.5.0) works correctly.
   Serial.println("[OTA] startDownload()..."); Serial.flush();
-  int size = ota.startDownload(OTA_FIRMWARE_URL);
+  int size = ota.startDownload(OTA_DIAG_URL); // TEMP DIAGNOSTIC: 29KB file on CloudFront instead of OTA_FIRMWARE_URL
   Serial.println("[OTA] startDownload() -> " + String(size)); Serial.flush();
   if (size <= 0) {
     otaErrorMsg = "OTA download failed (" + String(size) + ")";
@@ -121,11 +125,13 @@ bool startOtaUpdate() {
   Serial.println("[OTA] verify()..."); Serial.flush();
   ret = ota.verify();
   Serial.println("[OTA] verify() -> " + String(ret)); Serial.flush();
-  if (ret != OTAUpdate::OTA_ERROR_NONE) {
-    otaErrorMsg = "OTA verify failed (" + String(ret) + ")";
-    otaState = OTA_ERROR;
-    return false;
-  }
+
+  // TEMP DIAGNOSTIC STOP: this downloaded Arduino's demo .ota, not our firmware.
+  // Never call update()/reset() here - it would flash unrelated firmware onto the device.
+  Serial.println("[OTA] DIAGNOSTIC STOP - not calling update()/reset()"); Serial.flush();
+  otaErrorMsg = "Diagnostic run complete (see Serial)";
+  otaState = OTA_ERROR;
+  return false;
 
   Serial.println("[OTA] update()..."); Serial.flush();
   ret = ota.update();
