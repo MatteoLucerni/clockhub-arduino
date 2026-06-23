@@ -53,11 +53,11 @@ void loadOneShot() {
   if (oneShot.checkKey != ONESHOT_CHECK_KEY) {
     oneShot.armed = false;
     oneShot.triggerEpoch = 0;
-    oneShot.pumpEnabled = true;
+    oneShot.pumpEnabled = false;
     oneShot.lightEnabled = true;
     oneShot.blindEnabled = true;
-    oneShot.lightLeadMinutes = 15;
-    oneShot.blindLeadMinutes = 15;
+    oneShot.lightLeadMinutes = 0;
+    oneShot.blindLeadMinutes = 1;
     oneShot.pumpDone = false;
     oneShot.lightDone = false;
     oneShot.blindDone = false;

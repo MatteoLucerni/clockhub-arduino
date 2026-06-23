@@ -30,7 +30,7 @@ struct Config {
   int checkKey;
 };
 
-const int ONESHOT_CHECK_KEY = 24682;
+const int ONESHOT_CHECK_KEY = 24683;
 
 struct OneShotAlarm {
   bool armed;

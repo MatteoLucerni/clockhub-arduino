@@ -75,7 +75,29 @@ static void servePinPage(WiFiClient& client, const String& errorMsg = "", bool l
   client.println("</div></body></html>");
 }
 
-static void handleRoutes(const String& request) {
+// Returns true if the request matched an action route (so the caller should
+// redirect to the clean dashboard URL instead of rendering it as the response
+// to the action URL itself) — false for a plain dashboard load (no route
+// matched). Redirecting afterwards keeps the browser's address bar/history on
+// "/?pin=..." instead of e.g. "/ARM_ONESHOT?...&osH=0&osM=20...", so a later
+// reload (manual, or the dashboard's own /CHECK_LOCK polling) can never
+// silently replay an already-handled action — this previously caused a
+// one-shot alarm to immediately re-arm itself after firing, since
+// disarming changes the lock state, which triggers the polling reload.
+static bool handleRoutes(const String& request) {
+  bool matched = request.indexOf("GET /TOGGLE") >= 0
+    || request.indexOf("GET /SAVE_ALL") >= 0
+    || request.indexOf("GET /ARM_ONESHOT") >= 0
+    || request.indexOf("GET /CANCEL_ONESHOT") >= 0
+    || request.indexOf("GET /BLIND_OPEN") >= 0
+    || request.indexOf("GET /BLIND_CLOSE") >= 0
+    || request.indexOf("GET /BLIND_STOP") >= 0
+    || request.indexOf("GET /BLIND_FORCE_POS") >= 0
+    || request.indexOf("GET /SET_SLEEP_DELAY") >= 0
+    || request.indexOf("GET /CALC_BED") >= 0
+    || request.indexOf("GET /OTA_CHECK") >= 0
+    || request.indexOf("GET /OTA_DISMISS") >= 0;
+
   if (request.indexOf("GET /TOGGLE") >= 0) {
     manualOverride = !manualOverride;
     if (!manualOverride) digitalWrite(PUMP_PIN, LOW);
@@ -233,6 +255,8 @@ static void handleRoutes(const String& request) {
     otaState = OTA_IDLE;
     otaErrorMsg = "";
   }
+
+  return matched;
 }
 
 static void renderScheduleCard(WiFiClient& client, bool scheduleLocked) {
@@ -394,7 +418,7 @@ static void renderOneShotCard(WiFiClient& client, bool scheduleLocked, const Str
     client.println("<form action=\"/ARM_ONESHOT\" method=\"GET\">" + hp);
     client.println(String("<div class=\"row\"><span>Trigger in</span><div>")
       + "<input type=\"number\" name=\"osH\" min=\"0\" max=\"23\" value=\"0\"" + disabledAttr + "> h "
-      + "<input type=\"number\" name=\"osM\" min=\"0\" max=\"59\" value=\"20\"" + disabledAttr + "> min</div></div>");
+      + "<input type=\"number\" name=\"osM\" min=\"0\" max=\"59\" value=\"25\"" + disabledAttr + "> min</div></div>");
     client.println("<div class=\"row\"><span>Pump</span>" + toggleSwitch("ospen", oneShot.pumpEnabled, disabledAttr) + "</div>");
     client.println("<div class=\"row\"><span>Light</span>" + toggleSwitch("oslen", oneShot.lightEnabled, disabledAttr) + "</div>");
     client.println("<div class=\"row\"><span>Light Lead Time (min)</span><input type=\"number\" name=\"oslead\" value=\"" + String(oneShot.lightLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
@@ -553,7 +577,13 @@ void handleWebRequest() {
 
           if (request.indexOf("GET /OTA_APPLY") >= 0) {
             if (isScheduleLocked() || blindManualActive) {
-              renderDashboard(client, hp, pinParam, isScheduleLocked());
+              // Redirect instead of rendering the dashboard as the response to
+              // this URL — otherwise the browser's address bar stays on
+              // "/OTA_APPLY?..." and a later reload would re-attempt the apply.
+              client.println("HTTP/1.1 302 Found");
+              client.println("Location: /?" + pinParam);
+              client.println("Connection: close");
+              client.println();
               break;
             }
             // Send a self-reloading "updating" page, close this socket, then free
@@ -591,9 +621,20 @@ void handleWebRequest() {
             return;
           }
 
-          handleRoutes(request);
-          bool scheduleLocked = isScheduleLocked();
-          renderDashboard(client, hp, pinParam, scheduleLocked);
+          bool actionHandled = handleRoutes(request);
+          if (actionHandled) {
+            // Redirect to the clean dashboard URL so the browser's address bar
+            // (and any later reload, e.g. the dashboard's /CHECK_LOCK polling)
+            // never points at an action URL with stale query params — see the
+            // comment on handleRoutes() for why that matters.
+            client.println("HTTP/1.1 302 Found");
+            client.println("Location: /?" + pinParam);
+            client.println("Connection: close");
+            client.println();
+          } else {
+            bool scheduleLocked = isScheduleLocked();
+            renderDashboard(client, hp, pinParam, scheduleLocked);
+          }
           break;
 
         } else {

@@ -85,11 +85,11 @@ state = {
     # One-shot alarm (mirrors OneShotAlarm from types.h)
     "oneShotArmed": False,
     "oneShotTriggerAt": 0.0,  # epoch seconds (same reference as now_epoch())
-    "oneShotPumpEnabled": True,
+    "oneShotPumpEnabled": False,
     "oneShotLightEnabled": True,
     "oneShotBlindEnabled": True,
-    "oneShotLightLeadMinutes": 15,
-    "oneShotBlindLeadMinutes": 15,
+    "oneShotLightLeadMinutes": 0,
+    "oneShotBlindLeadMinutes": 1,
     "oneShotPumpDone": False,
     "oneShotLightDone": False,
     "oneShotBlindDone": False,
@@ -382,6 +382,24 @@ def qint(qs, key, default=None):
         except ValueError:
             return default
     return default
+
+
+# Every path handle_routes() recognizes as an action (as opposed to a plain
+# dashboard load). Mirrors web_server.cpp's handleRoutes() return value: after
+# one of these, do_GET() redirects to the clean dashboard URL instead of
+# rendering it as the response to the action URL itself -- otherwise the
+# browser's address bar/history stays on e.g. "/ARM_ONESHOT?...&osH=0&osM=20",
+# and a later reload (manual, or the dashboard's own /CHECK_LOCK polling)
+# would silently replay the action. This previously caused a one-shot alarm
+# to immediately re-arm itself after firing, since disarming changes the
+# lock state, which triggers the polling reload.
+ACTION_PATHS = {
+    "/TOGGLE", "/SAVE_ALL", "/ARM_ONESHOT", "/CANCEL_ONESHOT",
+    "/BLIND_OPEN", "/BLIND_CLOSE", "/BLIND_STOP", "/BLIND_FORCE_POS",
+    "/SET_SLEEP_DELAY", "/CALC_BED", "/OTA_CHECK", "/OTA_DISMISS",
+    "/DEV_SET_TIME", "/DEV_RESET_TIME",
+    "/DEV_OTA_TOGGLE_AVAILABLE", "/DEV_OTA_TOGGLE_FAILURE",
+}
 
 
 def handle_routes(path, qs):
@@ -906,7 +924,7 @@ def render_one_shot_card(schedule_locked, pin_param, hp):
         html.append("<form action=\"/ARM_ONESHOT\" method=\"GET\">" + hp)
         html.append("<div class=\"row\"><span>Trigger in</span><div>"
                      "<input type=\"number\" name=\"osH\" min=\"0\" max=\"23\" value=\"0\"%s> h "
-                     "<input type=\"number\" name=\"osM\" min=\"0\" max=\"59\" value=\"20\"%s> min</div></div>"
+                     "<input type=\"number\" name=\"osM\" min=\"0\" max=\"59\" value=\"25\"%s> min</div></div>"
                      % (disabled, disabled))
         html.append("<div class=\"row\"><span>Pump</span>%s</div>"
                      % toggle_switch("ospen", state["oneShotPumpEnabled"], disabled))
@@ -1102,8 +1120,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # on hardware, close the socket) BEFORE applying, instead of returning
             # the dashboard.
             if is_schedule_locked() or state["blindManualActive"]:
-                self._send(200, "text/html", render_dashboard(pin_param, is_schedule_locked()),
-                           extra_headers={"Cache-Control": "no-store"})
+                # Redirect instead of rendering the dashboard as the response to
+                # this URL -- see the ACTION_PATHS comment for why that matters.
+                self._send(302, "text/html", "",
+                           extra_headers={"Location": "/?pin=" + pin_param})
                 return
             if state["otaSimulateFailure"]:
                 state["otaState"] = "error"
@@ -1118,9 +1138,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         handle_routes(path, qs)
-        schedule_locked = is_schedule_locked()
-        self._send(200, "text/html", render_dashboard(pin_param, schedule_locked),
-                   extra_headers={"Cache-Control": "no-store"})
+        if path in ACTION_PATHS:
+            self._send(302, "text/html", "",
+                       extra_headers={"Location": "/?pin=" + pin_param})
+        else:
+            schedule_locked = is_schedule_locked()
+            self._send(200, "text/html", render_dashboard(pin_param, schedule_locked),
+                       extra_headers={"Cache-Control": "no-store"})
 
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
