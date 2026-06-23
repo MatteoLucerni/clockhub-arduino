@@ -40,6 +40,8 @@ unsigned long blindRunFullMs  = 0;
 int    blindRunStartPos = 0;
 int    blindPositionPct = -1;
 
+OneShotAlarm oneShot;
+
 int  targetWakeH = 8;
 int  targetWakeM = 30;
 bool showBedTimes = false;
@@ -69,6 +71,7 @@ void setup() {
   digitalWrite(MOTOR_IN2, LOW);
   loadConfig();
   loadBlindPosition();
+  loadOneShot();
   setupWiFi();
   updateDuckDNS();
   lastDuckDNSUpdate = millis();
@@ -87,4 +90,5 @@ void loop() {
     pendingAnnounceMsg = "";
   }
   runAlarmLogic();
+  runOneShotLogic();
 }

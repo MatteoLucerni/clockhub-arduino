@@ -36,6 +36,9 @@ extern unsigned long blindRunFullMs;
 extern int  blindRunStartPos;
 extern int  blindPositionPct;
 
+// One-shot alarm state
+extern OneShotAlarm oneShot;
+
 // Sleep calculator state
 extern int targetWakeH;
 extern int targetWakeM;

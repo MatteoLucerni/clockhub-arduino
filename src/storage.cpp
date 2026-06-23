@@ -5,6 +5,7 @@
 struct BlindPosStore { int checkKey; int positionPct; };
 static const int BLIND_POS_ADDR     = 256;
 static const int BLIND_POS_CHECK_KEY = 54321;
+static const int ONESHOT_ADDR = 300;
 
 void loadConfig() {
   EEPROM.get(0, sysConfig);
@@ -45,4 +46,26 @@ void loadBlindPosition() {
 void saveBlindPosition() {
   BlindPosStore store = { BLIND_POS_CHECK_KEY, blindPositionPct };
   EEPROM.put(BLIND_POS_ADDR, store);
+}
+
+void loadOneShot() {
+  EEPROM.get(ONESHOT_ADDR, oneShot);
+  if (oneShot.checkKey != ONESHOT_CHECK_KEY) {
+    oneShot.armed = false;
+    oneShot.triggerEpoch = 0;
+    oneShot.pumpEnabled = true;
+    oneShot.lightEnabled = true;
+    oneShot.blindEnabled = true;
+    oneShot.lightLeadMinutes = 15;
+    oneShot.blindLeadMinutes = 15;
+    oneShot.pumpDone = false;
+    oneShot.lightDone = false;
+    oneShot.blindDone = false;
+    oneShot.checkKey = ONESHOT_CHECK_KEY;
+    EEPROM.put(ONESHOT_ADDR, oneShot);
+  }
+}
+
+void saveOneShot() {
+  EEPROM.put(ONESHOT_ADDR, oneShot);
 }

@@ -116,6 +116,38 @@ static void handleRoutes(const String& request) {
       scheduleErrorMsg = "";
     }
   }
+  else if (request.indexOf("GET /ARM_ONESHOT") >= 0) {
+    // !oneShot.armed guards against a stale page (e.g. a second tab still
+    // showing the arm form) silently clobbering an already-armed one-shot.
+    if (!isScheduleLocked() && !oneShot.armed) {
+      int hoursFromNow   = parseParam(request, "osH=").toInt();
+      int minutesFromNow = parseParam(request, "osM=").toInt();
+      int totalMin = hoursFromNow * 60 + minutesFromNow;
+      bool pE = (request.indexOf("&ospen=") >= 0);
+      bool lE = (request.indexOf("&oslen=") >= 0);
+      bool bE = (request.indexOf("&osben=") >= 0);
+      if (totalMin > 0 && (pE || lE || bE)) {
+        oneShot.armed        = true;
+        oneShot.triggerEpoch = timeClient.getEpochTime() + (unsigned long)totalMin * 60UL;
+        oneShot.pumpEnabled  = pE;
+        oneShot.lightEnabled = lE;
+        oneShot.blindEnabled = bE;
+        String lLead = parseParam(request, "oslead=");
+        String bLead = parseParam(request, "osblead=");
+        if (lLead.length() > 0) oneShot.lightLeadMinutes = lLead.toInt();
+        if (bLead.length() > 0) oneShot.blindLeadMinutes = bLead.toInt();
+        oneShot.pumpDone = oneShot.lightDone = oneShot.blindDone = false;
+        saveOneShot();
+      }
+    }
+  }
+  else if (request.indexOf("GET /CANCEL_ONESHOT") >= 0) {
+    if (oneShot.armed) {
+      oneShot.armed = false;
+      oneShot.pumpDone = oneShot.lightDone = oneShot.blindDone = false;
+      saveOneShot();
+    }
+  }
   else if (request.indexOf("GET /BLIND_OPEN") >= 0) {
     int curPos    = currentBlindPosition();
     if (curPos == -1) curPos = 0;
@@ -329,6 +361,51 @@ static void renderBlindSettingsCard(WiFiClient& client, bool scheduleLocked) {
   client.println("</div>");
 }
 
+static void renderOneShotCard(WiFiClient& client, bool scheduleLocked, const String& pinParam, const String& hp) {
+  client.println("<div class=\"card\"><h2>One-Shot Alarm</h2>");
+  if (oneShot.armed) {
+    unsigned long nowEpoch = timeClient.getEpochTime();
+    long secsLeft = (long)oneShot.triggerEpoch - (long)nowEpoch;
+    if (secsLeft < 0) secsLeft = 0;
+    int hh = (int)(secsLeft / 3600);
+    int mm = (int)((secsLeft % 3600) / 60);
+    int ss = (int)(secsLeft % 60);
+
+    long curTotalSec = (long)timeClient.getHours() * 3600L + (long)timeClient.getMinutes() * 60L + (long)timeClient.getSeconds();
+    long triggerTotalSec = ((curTotalSec + secsLeft) % 86400L + 86400L) % 86400L;
+    int trgH = (int)(triggerTotalSec / 3600L);
+    int trgM = (int)((triggerTotalSec % 3600L) / 60L);
+
+    client.println("<p style=\"margin:0 0 10px\">Trigger at <b>" + formatTime(trgH, trgM) + "</b></p>");
+    client.println("<p id=\"osCountdown\" style=\"font-size:1.4rem;font-weight:bold;color:#007aff;margin:0 0 15px\">"
+      + String(hh) + "h " + String(mm) + "m " + String(ss) + "s</p>");
+    client.println("<div class=\"row\"><span>Pump</span><b>" + String(oneShot.pumpEnabled ? "ON" : "OFF") + "</b></div>");
+    client.println("<div class=\"row\"><span>Light</span><b>"
+      + (oneShot.lightEnabled ? ("ON (lead " + String(oneShot.lightLeadMinutes) + " min)") : String("OFF")) + "</b></div>");
+    client.println("<div class=\"row\"><span>Blind</span><b>"
+      + (oneShot.blindEnabled ? ("ON (lead " + String(oneShot.blindLeadMinutes) + " min)") : String("OFF")) + "</b></div>");
+    client.println("<a href=\"/CANCEL_ONESHOT?" + pinParam + "\" onclick=\"return confirm('Cancel the one-shot alarm?')\">"
+      + "<button class=\"btn btn-stop\">Cancel</button></a>");
+    client.println("<script>(function(){var s=" + String(secsLeft) + ";var el=document.getElementById('osCountdown');"
+      "setInterval(function(){if(s<=0)return;s--;var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;"
+      "el.textContent=h+'h '+m+'m '+sec+'s';},1000);})();</script>");
+  } else {
+    String disabledAttr = scheduleLocked ? " disabled" : "";
+    client.println("<form action=\"/ARM_ONESHOT\" method=\"GET\">" + hp);
+    client.println(String("<div class=\"row\"><span>Trigger in</span><div>")
+      + "<input type=\"number\" name=\"osH\" min=\"0\" max=\"23\" value=\"0\"" + disabledAttr + "> h "
+      + "<input type=\"number\" name=\"osM\" min=\"0\" max=\"59\" value=\"20\"" + disabledAttr + "> min</div></div>");
+    client.println("<div class=\"row\"><span>Pump</span>" + toggleSwitch("ospen", oneShot.pumpEnabled, disabledAttr) + "</div>");
+    client.println("<div class=\"row\"><span>Light</span>" + toggleSwitch("oslen", oneShot.lightEnabled, disabledAttr) + "</div>");
+    client.println("<div class=\"row\"><span>Light Lead Time (min)</span><input type=\"number\" name=\"oslead\" value=\"" + String(oneShot.lightLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
+    client.println("<div class=\"row\"><span>Blind</span>" + toggleSwitch("osben", oneShot.blindEnabled, disabledAttr) + "</div>");
+    client.println("<div class=\"row\"><span>Blind Lead Time (min)</span><input type=\"number\" name=\"osblead\" value=\"" + String(oneShot.blindLeadMinutes) + "\" min=\"0\"" + disabledAttr + "></div>");
+    lockedButton(client, "ARM ONE-SHOT ALARM", scheduleLocked);
+    client.println("</form>");
+  }
+  client.println("</div>");
+}
+
 static void renderFirmwareCard(WiFiClient& client, const String& pinParam, bool scheduleLocked) {
   client.println("<div class=\"card\"><h2>Firmware</h2>");
   client.println("<div class=\"row\"><span>Current version</span><b>" + String(FIRMWARE_VERSION) + "</b></div>");
@@ -400,6 +477,7 @@ static void renderDashboard(WiFiClient& client, const String& hp, const String& 
   client.println("<div class=\"card\" style=\"padding:10px\">");
   lockedButton(client, "SAVE ALL SETTINGS", scheduleLocked);
   client.println("</div></form>");
+  renderOneShotCard(client, scheduleLocked, pinParam, hp);
   renderSleepCard(client, hp);
   renderBlindCard(client, pinParam);
   renderFirmwareCard(client, pinParam, scheduleLocked);

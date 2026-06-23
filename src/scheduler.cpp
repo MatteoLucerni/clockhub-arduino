@@ -41,6 +41,30 @@ static uint8_t calcMotorPWM(unsigned long elapsed, unsigned long runMs, unsigned
   return (uint8_t)((uint32_t)sysConfig.motorSlowdown[seg] * 255 / 100);
 }
 
+// Non-blocking pump timer, shared by the weekly schedule and the one-shot
+// alarm. Starting a run while one is already active just resets the timer
+// (the pin is already HIGH), so two triggers landing in the same loop()
+// tick coalesce into a single continuous run instead of two back-to-back
+// blocking delay() calls.
+static bool pumpRunActive = false;
+static unsigned long pumpRunStartMs = 0;
+static unsigned long pumpRunDurationMs = 0;
+
+static void startPumpRun(int durationSec) {
+  digitalWrite(PUMP_PIN, HIGH);
+  pumpRunActive     = true;
+  pumpRunStartMs    = millis();
+  pumpRunDurationMs = (unsigned long)durationSec * 1000UL;
+}
+
+static void updatePumpRun() {
+  if (!pumpRunActive) return;
+  if (millis() - pumpRunStartMs >= pumpRunDurationMs) {
+    if (!manualOverride) digitalWrite(PUMP_PIN, LOW);
+    pumpRunActive = false;
+  }
+}
+
 // Returns the estimated blind position (0=closed, 100=open, -1=unknown).
 // If the motor is currently running, interpolates from the run start position.
 int currentBlindPosition() {
@@ -57,6 +81,14 @@ int currentBlindPosition() {
 }
 
 bool isScheduleLocked() {
+  if (oneShot.armed) {
+    long secsUntil = (long)oneShot.triggerEpoch - (long)timeClient.getEpochTime();
+    if (secsUntil <= 3600) {
+      scheduleErrorMsg = "Some settings cannot be modified because the one-shot alarm is within 1 hour";
+      return true;
+    }
+  }
+
   if (!sysConfig.globalEnabled) return false;
 
   int curDay = timeClient.getDay();
@@ -87,6 +119,14 @@ bool isScheduleLocked() {
 }
 
 bool isBlindClosingLocked() {
+  if (oneShot.armed && oneShot.blindEnabled) {
+    long blindTrigger = (long)oneShot.triggerEpoch - (long)oneShot.blindLeadMinutes * 60L;
+    long secsUntil = blindTrigger - (long)timeClient.getEpochTime();
+    if (secsUntil <= 1800 && secsUntil >= -1800) {
+      return true;
+    }
+  }
+
   if (!sysConfig.globalEnabled) return false;
 
   int curDay   = timeClient.getDay();
@@ -134,6 +174,8 @@ void runAlarmLogic() {
   } else {
     setMotor(0);
   }
+
+  updatePumpRun();
 
   if (manualOverride) {
     digitalWrite(PUMP_PIN, HIGH);
@@ -187,9 +229,7 @@ void runAlarmLogic() {
       // Trigger pump (water alarm)
       if (sysConfig.pumpEnabled && sysConfig.schedule[curDay].active && curTotal == almTotal) {
         if (!alarmTriggered) {
-          digitalWrite(PUMP_PIN, HIGH);
-          delay(sysConfig.runDuration * 1000);
-          digitalWrite(PUMP_PIN, LOW);
+          startPumpRun(sysConfig.runDuration);
           alarmTriggered = true;
         }
       } else {
@@ -203,5 +243,51 @@ void runAlarmLogic() {
       lightTriggered = false;
       blindTriggered = false;
     }
+  }
+}
+
+void runOneShotLogic() {
+  if (!oneShot.armed) return;
+  unsigned long nowEpoch = timeClient.getEpochTime();
+
+  if (oneShot.lightEnabled && !oneShot.lightDone &&
+      (long)oneShot.triggerEpoch - (long)oneShot.lightLeadMinutes * 60L - (long)nowEpoch <= 0) {
+    triggerVoiceMonkey();
+    oneShot.lightDone = true;
+    saveOneShot();
+  }
+
+  if (oneShot.blindEnabled && !oneShot.blindDone && !blindManualActive &&
+      (long)oneShot.triggerEpoch - (long)oneShot.blindLeadMinutes * 60L - (long)nowEpoch <= 0) {
+    int startPos  = (blindPositionPct == -1) ? 0 : blindPositionPct;
+    int remainPct = 100 - startPos;
+    if (remainPct > 0) {
+      blindRunStartPos     = startPos;
+      blindManualActive    = true;
+      blindManualDirection = 1;
+      blindRunStartMs      = millis();
+      blindRunFullMs       = (unsigned long)sysConfig.blindOpenDuration * 1000UL;
+      blindRunTotalMs      = blindRunFullMs * (unsigned long)remainPct / 100UL;
+    }
+    oneShot.blindDone = true;
+    saveOneShot();
+  }
+
+  // Skip (don't mark done) while a manual pump override is active, so the
+  // one-shot doesn't fight it for PUMP_PIN — it fires as soon as the
+  // override is lifted, since nowEpoch only ever moves forward.
+  if (oneShot.pumpEnabled && !oneShot.pumpDone && !manualOverride && nowEpoch >= oneShot.triggerEpoch) {
+    startPumpRun(sysConfig.runDuration);
+    oneShot.pumpDone = true;
+    saveOneShot();
+  }
+
+  bool pumpDone  = !oneShot.pumpEnabled  || oneShot.pumpDone;
+  bool lightDone = !oneShot.lightEnabled || oneShot.lightDone;
+  bool blindDone = !oneShot.blindEnabled || oneShot.blindDone;
+  if (nowEpoch >= oneShot.triggerEpoch && pumpDone && lightDone && blindDone) {
+    oneShot.armed = false;
+    oneShot.pumpDone = oneShot.lightDone = oneShot.blindDone = false;
+    saveOneShot();
   }
 }

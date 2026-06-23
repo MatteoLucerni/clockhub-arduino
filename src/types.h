@@ -29,3 +29,21 @@ struct Config {
   uint8_t motorSlowdown[6];
   int checkKey;
 };
+
+const int ONESHOT_CHECK_KEY = 24682;
+
+struct OneShotAlarm {
+  bool armed;
+  unsigned long triggerEpoch;   // same time reference as timeClient.getEpochTime()
+  bool pumpEnabled;
+  bool lightEnabled;
+  bool blindEnabled;
+  int lightLeadMinutes;
+  int blindLeadMinutes;
+  // Persisted (not just RAM) so a reboot mid-cycle doesn't replay an action
+  // that already fired before the reboot.
+  bool pumpDone;
+  bool lightDone;
+  bool blindDone;
+  int checkKey;
+};

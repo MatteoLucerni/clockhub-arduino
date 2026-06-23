@@ -82,6 +82,18 @@ state = {
     "blindCloseDuration": 150,
     "motorSlowdown": [80, 75, 70, 60, 40, 25],
 
+    # One-shot alarm (mirrors OneShotAlarm from types.h)
+    "oneShotArmed": False,
+    "oneShotTriggerAt": 0.0,  # epoch seconds (same reference as now_epoch())
+    "oneShotPumpEnabled": True,
+    "oneShotLightEnabled": True,
+    "oneShotBlindEnabled": True,
+    "oneShotLightLeadMinutes": 15,
+    "oneShotBlindLeadMinutes": 15,
+    "oneShotPumpDone": False,
+    "oneShotLightDone": False,
+    "oneShotBlindDone": False,
+
     # Runtime state
     "manualOverride": False,
     "pumpOnUntil": 0.0,
@@ -131,6 +143,10 @@ def now_dt():
     return datetime.now() + timedelta(seconds=state["timeOffsetSec"])
 
 
+def now_epoch():
+    return now_dt().timestamp()
+
+
 def current_day():
     return now_dt().isoweekday() % 7  # Sunday=0 .. Saturday=6
 
@@ -175,6 +191,12 @@ def get_bed_time(h, m, sleep_hours):
 # --------------------------------------------------------------------------
 
 def is_schedule_locked():
+    if state["oneShotArmed"]:
+        secs_until = state["oneShotTriggerAt"] - now_epoch()
+        if secs_until <= 3600:
+            state["scheduleErrorMsg"] = "Some settings cannot be modified because the one-shot alarm is within 1 hour"
+            return True
+
     if not state["globalEnabled"]:
         return False
 
@@ -204,6 +226,12 @@ def is_schedule_locked():
 
 
 def is_blind_closing_locked():
+    if state["oneShotArmed"] and state["oneShotBlindEnabled"]:
+        blind_trigger = state["oneShotTriggerAt"] - state["oneShotBlindLeadMinutes"] * 60
+        secs_until = blind_trigger - now_epoch()
+        if -1800 <= secs_until <= 1800:
+            return True
+
     if not state["globalEnabled"]:
         return False
 
@@ -253,6 +281,43 @@ def tick():
                 state["blindPositionPct"] = 100 if state["blindManualDirection"] == 1 else 0
                 state["blindManualActive"] = False
                 state["blindManualDirection"] = 0
+
+        if state["oneShotArmed"]:
+            now_e = now_epoch()
+
+            if (state["oneShotLightEnabled"] and not state["oneShotLightDone"]
+                    and state["oneShotTriggerAt"] - state["oneShotLightLeadMinutes"] * 60 - now_e <= 0):
+                state["oneShotLightDone"] = True
+
+            if (state["oneShotBlindEnabled"] and not state["oneShotBlindDone"] and not state["blindManualActive"]
+                    and state["oneShotTriggerAt"] - state["oneShotBlindLeadMinutes"] * 60 - now_e <= 0):
+                start_pos = 0 if state["blindPositionPct"] == -1 else state["blindPositionPct"]
+                remain = 100 - start_pos
+                if remain > 0:
+                    state["blindRunStartPos"] = start_pos
+                    state["blindManualActive"] = True
+                    state["blindManualDirection"] = 1
+                    state["blindRunStartTime"] = time.time()
+                    state["blindRunFullSec"] = float(state["blindOpenDuration"])
+                    state["blindRunTotalSec"] = state["blindRunFullSec"] * remain / 100.0
+                state["oneShotBlindDone"] = True
+
+            # Skip (don't mark done) while a manual pump override is active, so the
+            # one-shot doesn't fight it for the pump pin -- it fires as soon as the
+            # override is lifted, since now_e only ever moves forward.
+            if (state["oneShotPumpEnabled"] and not state["oneShotPumpDone"]
+                    and not state["manualOverride"] and now_e >= state["oneShotTriggerAt"]):
+                state["pumpOnUntil"] = time.time() + state["runDuration"]
+                state["oneShotPumpDone"] = True
+
+            pump_done = (not state["oneShotPumpEnabled"]) or state["oneShotPumpDone"]
+            light_done = (not state["oneShotLightEnabled"]) or state["oneShotLightDone"]
+            blind_done = (not state["oneShotBlindEnabled"]) or state["oneShotBlindDone"]
+            if now_e >= state["oneShotTriggerAt"] and pump_done and light_done and blind_done:
+                state["oneShotArmed"] = False
+                state["oneShotPumpDone"] = False
+                state["oneShotLightDone"] = False
+                state["oneShotBlindDone"] = False
 
         if state["manualOverride"]:
             return
@@ -364,6 +429,39 @@ def handle_routes(path, qs):
                     state["schedule"][i]["active"] = qflag(qs, "a%d" % i)
 
                 state["scheduleErrorMsg"] = ""
+
+        elif path == "/ARM_ONESHOT":
+            # not oneShotArmed guards against a stale page (e.g. a second tab still
+            # showing the arm form) silently clobbering an already-armed one-shot.
+            if not is_schedule_locked() and not state["oneShotArmed"]:
+                hours_from_now = qint(qs, "osH", 0)
+                minutes_from_now = qint(qs, "osM", 0)
+                total_min = hours_from_now * 60 + minutes_from_now
+                p_en = qflag(qs, "ospen")
+                l_en = qflag(qs, "oslen")
+                b_en = qflag(qs, "osben")
+                if total_min > 0 and (p_en or l_en or b_en):
+                    state["oneShotArmed"] = True
+                    state["oneShotTriggerAt"] = now_epoch() + total_min * 60
+                    state["oneShotPumpEnabled"] = p_en
+                    state["oneShotLightEnabled"] = l_en
+                    state["oneShotBlindEnabled"] = b_en
+                    os_lead = qint(qs, "oslead")
+                    os_blead = qint(qs, "osblead")
+                    if os_lead is not None:
+                        state["oneShotLightLeadMinutes"] = os_lead
+                    if os_blead is not None:
+                        state["oneShotBlindLeadMinutes"] = os_blead
+                    state["oneShotPumpDone"] = False
+                    state["oneShotLightDone"] = False
+                    state["oneShotBlindDone"] = False
+
+        elif path == "/CANCEL_ONESHOT":
+            if state["oneShotArmed"]:
+                state["oneShotArmed"] = False
+                state["oneShotPumpDone"] = False
+                state["oneShotLightDone"] = False
+                state["oneShotBlindDone"] = False
 
         elif path == "/BLIND_OPEN":
             cur_pos = current_blind_position()
@@ -601,22 +699,22 @@ def render_dev_card(pin_param):
 
     html.append("<div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;justify-content:center\">")
     for label, offset in (("-65 min", -65), ("-31 min", -31), ("-15 min", -15), ("Alarm", 0), ("+35 min", 35)):
-        html.append("<a href=\"/DEV_SET_TIME?mode=rel&offset=%d&%s\">"
+        html.append("<a href=\"/DEV_SET_TIME?mode=rel&offset=%d&pin=%s\">"
                      "<button type=\"button\" class=\"btn\" style=\"width:auto;margin:0;padding:8px 12px;"
                      "background:#eee\">%s</button></a>" % (offset, pin_param, label))
-    html.append("<a href=\"/DEV_RESET_TIME?%s\"><button type=\"button\" class=\"btn\" "
+    html.append("<a href=\"/DEV_RESET_TIME?pin=%s\"><button type=\"button\" class=\"btn\" "
                  "style=\"width:auto;margin:0;padding:8px 12px;background:#eee\">Real time</button></a>" % pin_param)
     html.append("</div>")
     html.append("<p style=\"font-size:0.72rem;color:#999;margin:8px 0 0\">Quick jumps are relative to "
                  "<b>today's</b> configured alarm time.</p>")
 
     html.append("<div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;justify-content:center\">")
-    html.append("<a href=\"/DEV_OTA_TOGGLE_AVAILABLE?%s\"><button type=\"button\" class=\"btn\" "
+    html.append("<a href=\"/DEV_OTA_TOGGLE_AVAILABLE?pin=%s\"><button type=\"button\" class=\"btn\" "
                  "style=\"width:auto;margin:0;padding:8px 12px;background:%s\">Simulate update available: %s"
                  "</button></a>" % (pin_param,
                                      "#34c759" if state["otaSimulateAvailable"] else "#eee",
                                      "ON" if state["otaSimulateAvailable"] else "OFF"))
-    html.append("<a href=\"/DEV_OTA_TOGGLE_FAILURE?%s\"><button type=\"button\" class=\"btn\" "
+    html.append("<a href=\"/DEV_OTA_TOGGLE_FAILURE?pin=%s\"><button type=\"button\" class=\"btn\" "
                  "style=\"width:auto;margin:0;padding:8px 12px;background:%s\">Simulate apply failure: %s"
                  "</button></a>" % (pin_param,
                                      "#ff3b30" if state["otaSimulateFailure"] else "#eee",
@@ -720,22 +818,22 @@ def render_blind_card(pin_param):
     html.append("<p style=\"font-weight:bold;color:%s;margin-bottom:2px\">%s</p>" % (state_color, state_label))
     html.append("<p style=\"margin:0 0 10px;color:#555\">Position: <b>%s</b></p>" % pos_str)
     html.append("<div style=\"display:flex;gap:8px\">")
-    html.append("<a href=\"/BLIND_OPEN?%s\" style=\"flex:1\"><button class=\"btn\" "
+    html.append("<a href=\"/BLIND_OPEN?pin=%s\" style=\"flex:1\"><button class=\"btn\" "
                  "style=\"background:#34c759;color:white;margin:0\">OPEN</button></a>" % pin_param)
-    html.append("<a href=\"/BLIND_CLOSE?%s\" style=\"flex:1\"><button class=\"btn\" "
+    html.append("<a href=\"/BLIND_CLOSE?pin=%s\" style=\"flex:1\"><button class=\"btn\" "
                  "style=\"background:#ff9500;color:white;margin:0\">CLOSE</button></a>" % pin_param)
-    html.append("<a href=\"/BLIND_STOP?%s\" style=\"flex:1\"><button class=\"btn btn-stop\" "
+    html.append("<a href=\"/BLIND_STOP?pin=%s\" style=\"flex:1\"><button class=\"btn btn-stop\" "
                  "style=\"margin:0\">STOP</button></a>" % pin_param)
     html.append("</div>")
     html.append("<div style=\"margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0\">")
     html.append("<p style=\"color:#bbb;font-size:0.75rem;margin:0 0 8px\">Position override (motor does not move)</p>")
     html.append("<div style=\"display:flex;gap:8px\">")
-    html.append("<a href=\"/BLIND_FORCE_POS?%s&pos=0\" "
+    html.append("<a href=\"/BLIND_FORCE_POS?pin=%s&pos=0\" "
                  "onclick=\"return confirm('Force position to CLOSED (0%% open)? The motor will not move.')\" "
                  "style=\"flex:1\">" % pin_param)
     html.append("<button class=\"btn\" style=\"background:#ff3b30;color:white;margin:0;font-size:0.88rem;"
                  "padding:10px\">Force Closed</button></a>")
-    html.append("<a href=\"/BLIND_FORCE_POS?%s&pos=100\" "
+    html.append("<a href=\"/BLIND_FORCE_POS?pin=%s&pos=100\" "
                  "onclick=\"return confirm('Force position to OPEN (100%% open)? The motor will not move.')\" "
                  "style=\"flex:1\">" % pin_param)
     html.append("<button class=\"btn\" style=\"background:#34c759;color:white;margin:0;font-size:0.88rem;"
@@ -777,6 +875,57 @@ def render_blind_settings_card(schedule_locked):
     return "".join(html)
 
 
+def render_one_shot_card(schedule_locked, pin_param, hp):
+    html = ["<div class=\"card\"><h2>One-Shot Alarm</h2>"]
+    if state["oneShotArmed"]:
+        secs_left = max(0, state["oneShotTriggerAt"] - now_epoch())
+        hh, rem = divmod(int(secs_left), 3600)
+        mm, ss = divmod(rem, 60)
+
+        now = now_dt()
+        cur_total_sec = now.hour * 3600 + now.minute * 60 + now.second
+        trigger_total_sec = (cur_total_sec + int(secs_left)) % 86400
+        trg_h, trg_m = divmod(trigger_total_sec // 60, 60)
+
+        html.append("<p style=\"margin:0 0 10px\">Trigger at <b>%02d:%02d</b></p>" % (trg_h, trg_m))
+        html.append("<p id=\"osCountdown\" style=\"font-size:1.4rem;font-weight:bold;color:#007aff;"
+                     "margin:0 0 15px\">%dh %dm %ds</p>" % (hh, mm, ss))
+        html.append("<div class=\"row\"><span>Pump</span><b>%s</b></div>"
+                     % ("ON" if state["oneShotPumpEnabled"] else "OFF"))
+        html.append("<div class=\"row\"><span>Light</span><b>%s</b></div>"
+                     % (("ON (lead %d min)" % state["oneShotLightLeadMinutes"]) if state["oneShotLightEnabled"] else "OFF"))
+        html.append("<div class=\"row\"><span>Blind</span><b>%s</b></div>"
+                     % (("ON (lead %d min)" % state["oneShotBlindLeadMinutes"]) if state["oneShotBlindEnabled"] else "OFF"))
+        html.append("<a href=\"/CANCEL_ONESHOT?pin=%s\" onclick=\"return confirm('Cancel the one-shot alarm?')\">"
+                     "<button class=\"btn btn-stop\">Cancel</button></a>" % pin_param)
+        html.append("<script>(function(){var s=%d;var el=document.getElementById('osCountdown');"
+                     "setInterval(function(){if(s<=0)return;s--;var h=Math.floor(s/3600),m=Math.floor((s%%3600)/60),"
+                     "sec=s%%60;el.textContent=h+'h '+m+'m '+sec+'s';},1000);})();</script>" % int(secs_left))
+    else:
+        disabled = " disabled" if schedule_locked else ""
+        html.append("<form action=\"/ARM_ONESHOT\" method=\"GET\">" + hp)
+        html.append("<div class=\"row\"><span>Trigger in</span><div>"
+                     "<input type=\"number\" name=\"osH\" min=\"0\" max=\"23\" value=\"0\"%s> h "
+                     "<input type=\"number\" name=\"osM\" min=\"0\" max=\"59\" value=\"20\"%s> min</div></div>"
+                     % (disabled, disabled))
+        html.append("<div class=\"row\"><span>Pump</span>%s</div>"
+                     % toggle_switch("ospen", state["oneShotPumpEnabled"], disabled))
+        html.append("<div class=\"row\"><span>Light</span>%s</div>"
+                     % toggle_switch("oslen", state["oneShotLightEnabled"], disabled))
+        html.append("<div class=\"row\"><span>Light Lead Time (min)</span>"
+                     "<input type=\"number\" name=\"oslead\" value=\"%d\" min=\"0\"%s></div>"
+                     % (state["oneShotLightLeadMinutes"], disabled))
+        html.append("<div class=\"row\"><span>Blind</span>%s</div>"
+                     % toggle_switch("osben", state["oneShotBlindEnabled"], disabled))
+        html.append("<div class=\"row\"><span>Blind Lead Time (min)</span>"
+                     "<input type=\"number\" name=\"osblead\" value=\"%d\" min=\"0\"%s></div>"
+                     % (state["oneShotBlindLeadMinutes"], disabled))
+        html.append(locked_button("ARM ONE-SHOT ALARM", schedule_locked))
+        html.append("</form>")
+    html.append("</div>")
+    return "".join(html)
+
+
 def render_updating_page(pin_param):
     # Mirrors the "updating" page web_server.cpp sends for /OTA_APPLY before the
     # blocking OTA. The mock can't reboot, so the auto-reload just returns to the
@@ -798,7 +947,7 @@ def render_firmware_card(pin_param, schedule_locked):
 
     if state["otaState"] == "error":
         html.append("<div class=\"error-msg\" style=\"margin:15px 0\">%s</div>" % state["otaErrorMsg"])
-        html.append("<a href=\"/OTA_DISMISS?%s\"><button class=\"btn btn-stop\">Dismiss</button></a>" % pin_param)
+        html.append("<a href=\"/OTA_DISMISS?pin=%s\"><button class=\"btn btn-stop\">Dismiss</button></a>" % pin_param)
     elif state["otaUpdateAvailable"]:
         html.append("<div class=\"row\"><span>Latest version</span>"
                      "<b style=\"color:#34c759\">%s</b></div>" % state["otaLatestVersion"])
@@ -806,14 +955,14 @@ def render_firmware_card(pin_param, schedule_locked):
             html.append("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" "
                          "disabled>UPDATE NOW</button>")
         else:
-            html.append("<a href=\"/OTA_APPLY?%s\" onclick=\"return confirm('Update firmware now? "
+            html.append("<a href=\"/OTA_APPLY?pin=%s\" onclick=\"return confirm('Update firmware now? "
                          "The device will reboot and may be unreachable for about a minute. "
                          "The page will reload automatically.')\">" % pin_param)
             html.append("<button class=\"btn btn-manual\">UPDATE NOW</button></a>")
     else:
         html.append("<p style=\"color:#8e8e93;font-size:0.85rem;margin:10px 0 0\">Firmware up to date</p>")
 
-    html.append("<a href=\"/OTA_CHECK?%s\"><button class=\"btn btn-stop\" "
+    html.append("<a href=\"/OTA_CHECK?pin=%s\"><button class=\"btn btn-stop\" "
                  "style=\"margin-top:8px\">Check for updates</button></a>" % pin_param)
     html.append("</div>")
     return "".join(html)
@@ -833,7 +982,7 @@ def render_status_card(pin_param):
     onclick = "" if state["manualOverride"] else " onclick=\"return confirm('Confirm manual pump start?')\""
     btn_class = "btn-stop" if state["manualOverride"] else "btn-manual"
     btn_label = "STOP PUMP" if state["manualOverride"] else "MANUAL START"
-    html.append("<a href=\"/TOGGLE?%s\"%s><button class=\"btn %s\">%s</button></a></div></body></html>"
+    html.append("<a href=\"/TOGGLE?pin=%s\"%s><button class=\"btn %s\">%s</button></a></div></body></html>"
                  % (pin_param, onclick, btn_class, btn_label))
     return "".join(html)
 
@@ -870,6 +1019,7 @@ def render_dashboard(pin_param, schedule_locked):
     html.append("<div class=\"card\" style=\"padding:10px\">")
     html.append(locked_button("SAVE ALL SETTINGS", schedule_locked))
     html.append("</div></form>")
+    html.append(render_one_shot_card(schedule_locked, pin_param, hp))
     html.append(render_sleep_card(hp))
     html.append(render_blind_card(pin_param))
     html.append(render_firmware_card(pin_param, schedule_locked))

@@ -49,10 +49,11 @@ pio run -e uno_r4_wifi -t upload    # build + flash via USB (close any open
 src/main.cpp        — setup() + loop() + global definitions
 src/types.h         — DaySetting, Config structs, pin numbers, timing constants
 src/globals.h       — extern declarations for all shared globals
-src/storage.h/.cpp  — loadConfig(), saveConfig() (EEPROM)
+src/storage.h/.cpp  — loadConfig(), saveConfig(), loadOneShot(), saveOneShot() (EEPROM)
 src/time_utils.h/.cpp — formatTime(), getWakeTime(), getBedTime()
 src/network.h/.cpp  — DuckDNS, VoiceMonkey/Alexa announcements, WiFi setup
-src/scheduler.h/.cpp — isScheduleLocked(), isBlindClosingLocked(), runAlarmLogic()
+src/scheduler.h/.cpp — isScheduleLocked(), isBlindClosingLocked(), runAlarmLogic(),
+                       runOneShotLogic() (one-shot alarm: see "One-shot alarm" below)
 src/web_server.h/.cpp — handleWebRequest() + dashboard HTML renderers
 src/ota_manager.h/.cpp — OTA version check + apply (see "OTA" below)
 src/root_ca.h        — CA cert for raw.githubusercontent.com (OTA downloads)
@@ -103,6 +104,45 @@ relevant routes — don't just eyeball the HTML string in the source.
   It's disabled while `isScheduleLocked()` or `blindManualActive`.
 - If `setCACert`/TLS starts failing, regenerate `src/root_ca.h` per the
   comment at the top of that file.
+
+## One-shot alarm
+
+- `OneShotAlarm` (`src/types.h`) is a separate struct from `Config`, persisted at
+  its own EEPROM address (`ONESHOT_ADDR = 300` in `storage.cpp`, with its own
+  `checkKey`) — adding/changing one-shot fields never touches the weekly
+  schedule's EEPROM layout or `checkKey`.
+- Unlike the weekly schedule (which compares minute-of-day + day-of-week), the
+  one-shot stores an **absolute epoch** (`triggerEpoch`, same reference as
+  `timeClient.getEpochTime()`) computed once at arm time
+  (`now + hours*60+minutes minutes`). This sidesteps all midnight/day-of-week
+  edge cases for a "fire once, N minutes from now" event.
+- `runOneShotLogic()` (`scheduler.cpp`) runs every `loop()` and auto-disarms
+  once the trigger has passed and every enabled action (pump/light/blind) has
+  run; it reuses `sysConfig.runDuration` and `sysConfig.blindOpenDuration`
+  rather than having its own durations. Its pump branch skips (without
+  marking done) while `manualOverride` is active, so it never fights a manual
+  pump run for `PUMP_PIN` — it fires as soon as the override is lifted, since
+  `nowEpoch` only moves forward.
+- `pumpDone`/`lightDone`/`blindDone` live **inside** `OneShotAlarm` (persisted
+  by `saveOneShot()` right after each fires), not as bare RAM globals — a
+  reboot mid-cycle must not replay an action that already completed.
+- Pump activation (`startPumpRun()`/`updatePumpRun()` in `scheduler.cpp`) is a
+  non-blocking `millis()`-based timer, shared by `runAlarmLogic()` and
+  `runOneShotLogic()` (mirroring the existing blind motor state machine
+  pattern) instead of `delay()`. Starting a run while one is already active
+  just resets the timer, so a weekly alarm and a one-shot landing on the same
+  pump trigger in the same `loop()` tick coalesce into one continuous run
+  instead of blocking twice back-to-back.
+- `isScheduleLocked()`/`isBlindClosingLocked()` check the one-shot's lock
+  window **before** the weekly `if (!sysConfig.globalEnabled) return false;`
+  early-return, so the one-shot still locks settings/OTA even when "System
+  Enabled" (the weekly toggle) is off.
+- The dashboard "One-Shot Alarm" card has its own `<form>`/route
+  (`/ARM_ONESHOT`, `/CANCEL_ONESHOT`), separate from `/SAVE_ALL`, since arming
+  is a distinct action from saving settings. `/ARM_ONESHOT` is rejected while
+  already armed (prevents a stale page/duplicate request from silently
+  clobbering a pending one-shot); `/CANCEL_ONESHOT` is a no-op when not armed,
+  and is never blocked by the lock it itself creates.
 
 ## Conventions
 

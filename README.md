@@ -7,6 +7,8 @@ The device runs a local web server for schedule configuration, triggers a VoiceM
 ## Features
 
 - Weekly alarm schedule with per-day enable/disable
+- One-shot alarm: trigger pump/light/blind once, a set number of hours/minutes
+  from now, with its own independent light/blind lead times
 - Configurable pump run duration
 - Configurable light lead time (VoiceMonkey fires N minutes before alarm)
 - Motorized blind with scheduled open/close, manual open/close/stop controls,
@@ -139,6 +141,8 @@ clockhub-arduino/
 | `/` | PIN page (unauthenticated) or main dashboard (with valid `pin=` param) |
 | `/LOGIN` | Validate PIN and redirect to the dashboard |
 | `/SAVE_ALL` | Save weekly schedule, system/pump/light/blind enable flags, pump duration, light lead time, and blind timing/position settings (single combined form) |
+| `/ARM_ONESHOT` | Arm the one-shot alarm: hours/minutes from now, pump/light/blind flags, light/blind lead times |
+| `/CANCEL_ONESHOT` | Disarm the one-shot alarm (always allowed, even during its own lock window) |
 | `/TOGGLE` | Manual pump on/off override |
 | `/BLIND_OPEN` / `/BLIND_CLOSE` / `/BLIND_STOP` | Manual blind control |
 | `/BLIND_FORCE_POS?pos=0\|100` | Reset the tracked blind position without moving the motor |
