@@ -402,6 +402,18 @@ ACTION_PATHS = {
 }
 
 
+def check_for_update():
+    """Mirrors checkForUpdateIfNeeded() in ota_manager.cpp -- simplified here
+    since the mock has no real network/version check, just reflects the
+    'Simulate update available' dev toggle."""
+    if state["otaSimulateAvailable"]:
+        state["otaUpdateAvailable"] = True
+        state["otaLatestVersion"] = state["firmwareVersion"] + "-new"
+    else:
+        state["otaUpdateAvailable"] = False
+        state["otaLatestVersion"] = ""
+
+
 def handle_routes(path, qs):
     with state_lock:
         if path == "/TOGGLE":
@@ -575,12 +587,7 @@ def handle_routes(path, qs):
             state["otaSimulateFailure"] = not state["otaSimulateFailure"]
 
         elif path == "/OTA_CHECK":
-            if state["otaSimulateAvailable"]:
-                state["otaUpdateAvailable"] = True
-                state["otaLatestVersion"] = state["firmwareVersion"] + "-new"
-            else:
-                state["otaUpdateAvailable"] = False
-                state["otaLatestVersion"] = ""
+            check_for_update()
 
         # NOTE: /OTA_APPLY is handled directly in do_GET() (it must send the
         # "updating" page, not the dashboard), mirroring web_server.cpp.
@@ -1142,6 +1149,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(302, "text/html", "",
                        extra_headers={"Location": "/?pin=" + pin_param})
         else:
+            # Mirrors web_server.cpp: force a fresh OTA check on every real
+            # dashboard load while there's OTA state worth re-verifying.
+            if state["otaState"] == "error" or state["otaUpdateAvailable"]:
+                check_for_update()
             schedule_locked = is_schedule_locked()
             self._send(200, "text/html", render_dashboard(pin_param, schedule_locked),
                        extra_headers={"Cache-Control": "no-store"})

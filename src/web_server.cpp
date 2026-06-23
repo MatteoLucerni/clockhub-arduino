@@ -632,6 +632,17 @@ void handleWebRequest() {
             client.println("Connection: close");
             client.println();
           } else {
+            // Force a fresh OTA check on every real dashboard load while there's
+            // OTA state worth re-verifying (a pending update or a failed apply) —
+            // otherwise the card stays stuck showing "UPDATE NOW"/the old error
+            // until the next periodic check (up to OTA_CHECK_INTERVAL) or a manual
+            // "Check for updates" tap. Skipped when everything's already idle, so
+            // routine clicks (which also land here after their redirect) don't
+            // pay for an extra network round-trip on every action.
+            if (otaState == OTA_ERROR || otaUpdateAvailable) {
+              lastOtaCheck = 0;
+              checkForUpdateIfNeeded();
+            }
             bool scheduleLocked = isScheduleLocked();
             renderDashboard(client, hp, pinParam, scheduleLocked);
           }
