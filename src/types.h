@@ -9,6 +9,8 @@ const unsigned long DUCKDNS_INTERVAL = 300000;
 const unsigned long OTA_CHECK_INTERVAL = 30UL * 60UL * 1000UL; // 30min
 const unsigned long OTA_DASHBOARD_RECHECK_MS = 60000UL;
 const unsigned long HTTP_REQUEST_TIMEOUT_MS = 2000UL;
+const unsigned long HTTP_FIRSTBYTE_TIMEOUT_MS = 500UL;
+const unsigned long WEB_ACTIVITY_GRACE_MS = 15000UL;
 const unsigned long AUTH_COOKIE_MAX_AGE_SEC = 30UL * 24UL * 3600UL;
 
 struct DaySetting {

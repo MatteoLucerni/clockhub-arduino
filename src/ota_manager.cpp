@@ -103,6 +103,8 @@ void checkForUpdateNow(int attempts) {
 void checkForUpdateIfNeeded() {
   if (lastOtaCheck != 0 && millis() - lastOtaCheck < OTA_CHECK_INTERVAL) return;
   if (otaCheckBusy()) return;
+  if (millis() - lastWebActivityMs < WEB_ACTIVITY_GRACE_MS
+      && lastOtaCheck != 0 && millis() - lastOtaCheck < OTA_CHECK_INTERVAL * 2UL) return;
   checkForUpdateNow(1);
 }
 

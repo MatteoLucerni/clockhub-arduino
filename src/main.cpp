@@ -48,6 +48,7 @@ bool showBedTimes = false;
 
 unsigned long lastDuckDNSUpdate = 0;
 int           currentUTCOffset  = 3600;
+unsigned long lastWebActivityMs = 0;
 
 OtaState      otaState = OTA_IDLE;
 bool          otaUpdateAvailable = false;

@@ -47,6 +47,7 @@ extern bool showBedTimes;
 // Timing
 extern unsigned long lastDuckDNSUpdate;
 extern int currentUTCOffset;
+extern unsigned long lastWebActivityMs;
 
 // OTA update state
 enum OtaState { OTA_IDLE, OTA_ERROR };

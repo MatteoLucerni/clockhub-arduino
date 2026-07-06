@@ -64,8 +64,9 @@ void setupWiFi() {
 }
 
 void updateDuckDNSIfNeeded() {
-  if (millis() - lastDuckDNSUpdate >= DUCKDNS_INTERVAL) {
-    updateDuckDNS();
-    lastDuckDNSUpdate = millis();
-  }
+  if (millis() - lastDuckDNSUpdate < DUCKDNS_INTERVAL) return;
+  if (millis() - lastWebActivityMs < WEB_ACTIVITY_GRACE_MS
+      && millis() - lastDuckDNSUpdate < DUCKDNS_INTERVAL * 3UL) return;
+  updateDuckDNS();
+  lastDuckDNSUpdate = millis();
 }

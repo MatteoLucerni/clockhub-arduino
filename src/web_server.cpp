@@ -47,9 +47,11 @@ private:
     }
   }
   WiFiClient& client;
-  char buf[1024];
+  static char buf[2048];
   size_t len;
 };
+
+char BufferedClient::buf[2048];
 
 static String extractPinValue(const String& source, const String& key) {
   int idx = source.indexOf(key);
@@ -574,13 +576,16 @@ static void renderDashboard(BufferedClient& client, const String& hp, const Stri
 void handleWebRequest() {
   WiFiClient client = server.available();
   if (!client) return;
+  lastWebActivityMs = millis();
 
   String currentLine = "";
   String request = "";
   unsigned long requestStartMs = millis();
 
   while (client.connected()) {
-    if (millis() - requestStartMs > HTTP_REQUEST_TIMEOUT_MS) break;
+    unsigned long elapsed = millis() - requestStartMs;
+    if (elapsed > HTTP_REQUEST_TIMEOUT_MS) break;
+    if (request.length() == 0 && elapsed > HTTP_FIRSTBYTE_TIMEOUT_MS) break;
     if (client.available()) {
       char c = client.read();
       request += c;
