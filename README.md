@@ -115,7 +115,6 @@ clockhub-arduino/
 ├── extra_scripts/
 │   └── load_env.py           # Reads .env, generates src/config.h + FIRMWARE_VERSION
 ├── tools/
-│   ├── mock_server.py        # Dashboard clone for browser-based UI testing
 │   └── ota_tools/             # Vendored .bin -> .ota conversion tools (used by CI)
 ├── .github/workflows/
 │   └── ota-build.yml         # Builds firmware and publishes OTA release on push to main
@@ -156,23 +155,6 @@ clockhub-arduino/
 ### PIN authentication
 
 The PIN page uses a custom JavaScript masking layer (`type="text"` + `inputmode="numeric"`) so characters are never visually displayed — only bullet points appear. The form submits automatically 1.5 seconds after the last keypress, without revealing the PIN length. After 5 failed attempts the interface locks for 5 minutes.
-
-## Local UI Testing (Mock Server)
-
-The dashboard can be tested in a regular browser without any hardware, using
-a Python clone of the web UI:
-
-```bash
-python tools/mock_server.py [port]   # default port 8080, binds 0.0.0.0
-```
-
-It reads `ACCESS_PIN` from `.env` (falls back to `1234` if not set). Open
-`http://127.0.0.1:<port>/?pin=<ACCESS_PIN>`. The mock dashboard includes a
-"Dev Tools" card to time-travel the simulated clock (to test alarm-window
-locking) and to simulate OTA update-available / apply-failure scenarios.
-
-`tools/mock_server.py` mirrors `src/web_server.cpp`'s HTML, CSS and routes —
-any dashboard change should be reflected in both files.
 
 ## OTA Updates ("OneTap")
 

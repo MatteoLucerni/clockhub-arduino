@@ -22,13 +22,59 @@ static String parseParam(const String& req, const String& key, char terminator =
   return req.substring(start, end);
 }
 
+class BufferedClient {
+public:
+  explicit BufferedClient(WiFiClient& c) : client(c), len(0) {}
+  void print(const String& s) { write(s.c_str(), s.length()); }
+  void println(const String& s) { print(s); write("\r\n", 2); }
+  void println() { write("\r\n", 2); }
+  void flush() {
+    if (len > 0) {
+      client.write((const uint8_t*)buf, len);
+      len = 0;
+    }
+  }
+private:
+  void write(const char* data, size_t n) {
+    while (n > 0) {
+      size_t space = sizeof(buf) - len;
+      size_t chunk = (n < space) ? n : space;
+      memcpy(buf + len, data, chunk);
+      len += chunk;
+      data += chunk;
+      n -= chunk;
+      if (len == sizeof(buf)) flush();
+    }
+  }
+  WiFiClient& client;
+  char buf[1024];
+  size_t len;
+};
+
+static String extractPinValue(const String& source, const String& key) {
+  int idx = source.indexOf(key);
+  if (idx < 0) return "";
+  int start = idx + key.length();
+  int end = start;
+  while (end < (int)source.length()) {
+    char c = source.charAt(end);
+    if (c == '&' || c == ' ' || c == ';' || c == '\r' || c == '\n') break;
+    end++;
+  }
+  return source.substring(start, end);
+}
+
+static String authCookieHeader() {
+  return "Set-Cookie: pin=" + String(access_pin) + "; Max-Age=" + String(AUTH_COOKIE_MAX_AGE_SEC) + "; Path=/; HttpOnly; SameSite=Lax";
+}
+
 static String toggleSwitch(const String& name, bool isChecked, const String& disabledAttr, const String& extraStyle = "") {
   return "<label class=\"switch\"" + (extraStyle.length() > 0 ? " style=\"" + extraStyle + "\"" : "") + ">"
     + "<input type=\"checkbox\" name=\"" + name + "\" " + (isChecked ? "checked" : "") + disabledAttr + ">"
     + "<span class=\"slider\"></span></label>";
 }
 
-static void lockedButton(WiFiClient& client, const String& label, bool scheduleLocked) {
+static void lockedButton(BufferedClient& client, const String& label, bool scheduleLocked) {
   if (scheduleLocked) {
     client.println("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" disabled>" + label + "</button>");
   } else {
@@ -36,12 +82,15 @@ static void lockedButton(WiFiClient& client, const String& label, bool scheduleL
   }
 }
 
-static void servePinPage(WiFiClient& client, const String& errorMsg = "", bool locked = false) {
+static void servePinPage(BufferedClient& client, const String& errorMsg = "", bool locked = false, bool clearStaleCookie = false) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-type:text/html");
+  if (clearStaleCookie) {
+    client.println("Set-Cookie: pin=; Max-Age=0; Path=/");
+  }
   client.println("Connection: close");
   client.println();
-  client.println("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+  client.println("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><link rel=\"icon\" href=\"data:,\">");
   client.println("<style>body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:40px 10px;background-color:#efeff4;}.card{background:white;padding:30px;margin:60px auto;max-width:300px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.2rem;color:#333;margin-bottom:20px;}#pinInput{padding:12px;width:100%;text-align:center;font-size:26px;letter-spacing:10px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;margin-bottom:15px;caret-color:transparent;}.error{background:#ff3b30;color:white;padding:10px;border-radius:8px;margin-bottom:15px;font-size:0.9rem;}</style>");
   client.println("</head><body><div class=\"card\"><h2>ClockHub</h2>");
   if (errorMsg.length() > 0) {
@@ -259,7 +308,7 @@ static bool handleRoutes(const String& request) {
   return matched;
 }
 
-static void renderScheduleCard(WiFiClient& client, bool scheduleLocked) {
+static void renderScheduleCard(BufferedClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Weekly Schedule</h2>");
   for (int i = 0; i < 7; i++) {
@@ -272,14 +321,14 @@ static void renderScheduleCard(WiFiClient& client, bool scheduleLocked) {
   client.println("</div>");
 }
 
-static void renderSettingsCard(WiFiClient& client, bool scheduleLocked) {
+static void renderSettingsCard(BufferedClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Settings</h2>");
   client.println("<div class=\"row\"><span>System Enabled</span>" + toggleSwitch("en", sysConfig.globalEnabled, disabledAttr) + "</div>");
   client.println("</div>");
 }
 
-static void renderPumpCard(WiFiClient& client, bool scheduleLocked) {
+static void renderPumpCard(BufferedClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Pump Settings</h2>");
   client.println("<div class=\"row\"><span>Enabled</span>" + toggleSwitch("pen", sysConfig.pumpEnabled, disabledAttr) + "</div>"
@@ -287,7 +336,7 @@ static void renderPumpCard(WiFiClient& client, bool scheduleLocked) {
   client.println("</div>");
 }
 
-static void renderLightCard(WiFiClient& client, bool scheduleLocked) {
+static void renderLightCard(BufferedClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Light Settings</h2>");
   client.println("<div class=\"row\"><span>Enabled</span>" + toggleSwitch("len", sysConfig.lightEnabled, disabledAttr) + "</div>"
@@ -295,7 +344,7 @@ static void renderLightCard(WiFiClient& client, bool scheduleLocked) {
   client.println("</div>");
 }
 
-static void renderSleepCard(WiFiClient& client, const String& hp) {
+static void renderSleepCard(BufferedClient& client, const String& hp) {
   float opts[] = {10.5, 9.0, 7.5, 6.0};
 
   client.println("<div class=\"card\"><h2>Sleep Cycles</h2>"
@@ -327,7 +376,7 @@ static void renderSleepCard(WiFiClient& client, const String& hp) {
   client.println("</div>");
 }
 
-static void renderBlindCard(WiFiClient& client, const String& pinParam) {
+static void renderBlindCard(BufferedClient& client, const String& pinParam) {
   String stateLabel, stateColor;
   if (blindManualActive && blindManualDirection == 1) {
     stateLabel = "OPENING"; stateColor = "#34c759";
@@ -358,7 +407,7 @@ static void renderBlindCard(WiFiClient& client, const String& pinParam) {
   client.println("</div></div></div>");
 }
 
-static void renderBlindSettingsCard(WiFiClient& client, bool scheduleLocked) {
+static void renderBlindSettingsCard(BufferedClient& client, bool scheduleLocked) {
   String disabledAttr = scheduleLocked ? " disabled" : "";
   client.println("<div class=\"card\"><h2>Blind Settings</h2>");
   client.println("<div class=\"row\"><span>Enabled</span>" + toggleSwitch("ben", sysConfig.blindEnabled, disabledAttr) + "</div>");
@@ -385,7 +434,7 @@ static void renderBlindSettingsCard(WiFiClient& client, bool scheduleLocked) {
   client.println("</div>");
 }
 
-static void renderOneShotCard(WiFiClient& client, bool scheduleLocked, const String& pinParam, const String& hp) {
+static void renderOneShotCard(BufferedClient& client, bool scheduleLocked, const String& pinParam, const String& hp) {
   client.println("<div class=\"card\"><h2>One-Shot Alarm</h2>");
   if (oneShot.armed) {
     unsigned long nowEpoch = timeClient.getEpochTime();
@@ -430,7 +479,7 @@ static void renderOneShotCard(WiFiClient& client, bool scheduleLocked, const Str
   client.println("</div>");
 }
 
-static void renderFirmwareCard(WiFiClient& client, const String& pinParam, bool scheduleLocked) {
+static void renderFirmwareCard(BufferedClient& client, const String& pinParam, bool scheduleLocked) {
   client.println("<div class=\"card\"><h2>Firmware</h2>");
   client.println("<div class=\"row\"><span>Current version</span><b>" + String(FIRMWARE_VERSION) + "</b></div>");
 
@@ -453,7 +502,7 @@ static void renderFirmwareCard(WiFiClient& client, const String& pinParam, bool 
   client.println("</div>");
 }
 
-static void renderStatusCard(WiFiClient& client, const String& pinParam) {
+static void renderStatusCard(BufferedClient& client, const String& pinParam) {
   client.print("<div class=\"card\"><h2>Status</h2>"
     + String("<p>") + daysOfWeek[timeClient.getDay()] + ", " + timeClient.getFormattedTime() + "</p>"
     + "<p style=\"font-weight:bold\">"
@@ -465,13 +514,14 @@ static void renderStatusCard(WiFiClient& client, const String& pinParam) {
     + "</button></a></div></body></html>");
 }
 
-static void renderDashboard(WiFiClient& client, const String& hp, const String& pinParam, bool scheduleLocked) {
+static void renderDashboard(BufferedClient& client, const String& hp, const String& pinParam, bool scheduleLocked) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-type:text/html");
   client.println("Cache-Control: no-store");
+  client.println(authCookieHeader());
   client.println("Connection: close");
   client.println();
-  client.println("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+  client.println("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><link rel=\"icon\" href=\"data:,\">");
   client.println("<style>");
   client.println("body{font-family:-apple-system,system-ui,sans-serif;text-align:center;margin:0;padding:10px;background-color:#efeff4;color:#333;}.card{background:white;padding:15px;margin:15px auto;max-width:500px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}h2{font-size:1.1rem;margin-top:0;color:#666;border-bottom:1px solid #eee;padding-bottom:8px;text-transform:uppercase;}h3{font-size:0.9rem;color:#888;margin:15px 0 5px 0;text-align:left;border-left:3px solid #007aff;padding-left:8px;}.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}input[type=number]{padding:8px;width:50px;text-align:center;font-size:16px;border:1px solid #ccc;border-radius:6px;}.btn{width:100%;padding:15px;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:10px;}.btn-save{background-color:#007aff;color:white;}.btn-manual{background-color:#ff3b30;color:white;}.btn-stop{background-color:#8e8e93;color:white;}.cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}.cycle-item{background:#f8f8f8;padding:10px;border-radius:8px;font-size:0.85rem;}.cycle-time{font-weight:bold;color:#007aff;display:block;font-size:1.1rem;}.calc-row{display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:10px 0;}.error-msg{background:#ff3b30;color:white;padding:12px;border-radius:8px;margin:15px auto;max-width:500px;font-weight:bold;}.prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;}.plbl{width:36px;font-size:0.82rem;color:#666;text-align:right;flex-shrink:0;}.prow input[type=range]{flex:1;min-width:0;height:28px;cursor:pointer;}.pval{width:38px;font-size:0.9rem;font-weight:bold;color:#007aff;text-align:right;flex-shrink:0;}.switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;}.switch input{opacity:0;width:0;height:0;}.switch .slider{position:absolute;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.2s;border-radius:26px;cursor:pointer;}.switch .slider:before{position:absolute;content:\"\";height:20px;width:20px;left:3px;bottom:3px;background-color:#fff;transition:.2s;border-radius:50%;}.switch input:checked+.slider{background-color:#34c759;}.switch input:checked+.slider:before{transform:translateX(20px);}.switch input:disabled+.slider{opacity:.5;cursor:not-allowed;}");
   client.println("</style>");
@@ -514,30 +564,56 @@ void handleWebRequest() {
 
   String currentLine = "";
   String request = "";
+  unsigned long requestStartMs = millis();
 
   while (client.connected()) {
+    if (millis() - requestStartMs > HTTP_REQUEST_TIMEOUT_MS) break;
     if (client.available()) {
       char c = client.read();
       request += c;
       if (c == '\n') {
         if (currentLine.length() == 0) {
+          BufferedClient out(client);
 
-          bool isPinValid = (request.indexOf("pin=" + String(access_pin)) >= 0);
+          int reqLineEnd = request.indexOf('\n');
+          String requestLine = (reqLineEnd > 0) ? request.substring(0, reqLineEnd) : request;
+
+          if (requestLine.indexOf("GET /favicon") >= 0 || requestLine.indexOf("GET /apple-touch-icon") >= 0) {
+            out.println("HTTP/1.1 404 Not Found");
+            out.println("Connection: close");
+            out.println();
+            out.flush();
+            break;
+          }
+
+          String urlPin = extractPinValue(requestLine, "pin=");
+          String cookiePin = "";
+          int cookieIdx = request.indexOf("Cookie:");
+          if (cookieIdx >= 0) {
+            int cookieEnd = request.indexOf('\n', cookieIdx);
+            String cookieLine = (cookieEnd > 0) ? request.substring(cookieIdx, cookieEnd) : request.substring(cookieIdx);
+            cookiePin = extractPinValue(cookieLine, "pin=");
+          }
+          bool isPinValid = (urlPin.length() > 0 && urlPin == String(access_pin))
+            || (cookiePin.length() > 0 && cookiePin == String(access_pin));
 
           if (request.indexOf("GET /LOGIN") >= 0) {
             if (isPinValid) {
-              client.println("HTTP/1.1 302 Found");
-              client.println("Location: /?pin=" + String(access_pin));
-              client.println("Connection: close");
-              client.println();
+              out.println("HTTP/1.1 302 Found");
+              out.println("Location: /?pin=" + String(access_pin));
+              out.println(authCookieHeader());
+              out.println("Connection: close");
+              out.println();
             } else {
-              servePinPage(client);
+              servePinPage(out);
             }
+            out.flush();
             break;
           }
 
           if (!isPinValid && request.indexOf("GET /CHECK_LOCK") < 0) {
-            bool hasPin = (request.indexOf("pin=") >= 0);
+            bool hasUrlPin = (urlPin.length() > 0);
+            bool hasStaleCookie = (cookiePin.length() > 0);
 
             if (pinFailCount > 0 && (millis() - pinFirstFailTime) >= PIN_LOCKOUT_MS) {
               pinFailCount = 0;
@@ -545,19 +621,20 @@ void handleWebRequest() {
 
             if (pinFailCount >= PIN_MAX_ATTEMPTS) {
               int minsLeft = (int)((PIN_LOCKOUT_MS - (millis() - pinFirstFailTime)) / 60000) + 1;
-              servePinPage(client, "Too many attempts. Try again in " + String(minsLeft) + " min.", true);
-            } else if (hasPin) {
+              servePinPage(out, "Too many attempts. Try again in " + String(minsLeft) + " min.", true, hasStaleCookie);
+            } else if (hasUrlPin) {
               if (pinFailCount == 0) pinFirstFailTime = millis();
               pinFailCount++;
               int remaining = PIN_MAX_ATTEMPTS - pinFailCount;
               if (remaining > 0) {
-                servePinPage(client, "Incorrect PIN. Remaining attempts: " + String(remaining));
+                servePinPage(out, "Incorrect PIN. Remaining attempts: " + String(remaining), false, hasStaleCookie);
               } else {
-                servePinPage(client, "Too many attempts. Try again in 5 min.", true);
+                servePinPage(out, "Too many attempts. Try again in 5 min.", true, hasStaleCookie);
               }
             } else {
-              servePinPage(client);
+              servePinPage(out, "", false, hasStaleCookie);
             }
+            out.flush();
             break;
           }
 
@@ -567,11 +644,12 @@ void handleWebRequest() {
           String hp = "<input type=\"hidden\" name=\"pin\" value=\"" + String(access_pin) + "\">";
 
           if (request.indexOf("GET /CHECK_LOCK") >= 0) {
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/plain");
-            client.println("Connection: close");
-            client.println();
-            client.print(isScheduleLocked() ? "1" : "0");
+            out.println("HTTP/1.1 200 OK");
+            out.println("Content-type:text/plain");
+            out.println("Connection: close");
+            out.println();
+            out.print(isScheduleLocked() ? "1" : "0");
+            out.flush();
             break;
           }
 
@@ -580,10 +658,11 @@ void handleWebRequest() {
               // Redirect instead of rendering the dashboard as the response to
               // this URL — otherwise the browser's address bar stays on
               // "/OTA_APPLY?..." and a later reload would re-attempt the apply.
-              client.println("HTTP/1.1 302 Found");
-              client.println("Location: /?" + pinParam);
-              client.println("Connection: close");
-              client.println();
+              out.println("HTTP/1.1 302 Found");
+              out.println("Location: /?" + pinParam);
+              out.println("Connection: close");
+              out.println();
+              out.flush();
               break;
             }
             // Send a self-reloading "updating" page, close this socket, then free
@@ -596,11 +675,11 @@ void handleWebRequest() {
             // startOtaUpdate() reboots and never returns; on failure we restore the
             // services so the dashboard keeps working (the OTA_ERROR state is then
             // shown when this page reloads).
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println("Connection: close");
-            client.println();
-            client.println("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+            out.println("HTTP/1.1 200 OK");
+            out.println("Content-type:text/html");
+            out.println("Connection: close");
+            out.println();
+            out.println("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
               "<meta http-equiv=\"refresh\" content=\"75;url=/?" + pinParam + "\">"
               "<title>Updating...</title></head>"
               "<body style=\"font-family:sans-serif;text-align:center;padding-top:40px\">"
@@ -608,6 +687,7 @@ void handleWebRequest() {
               "<p>The device is downloading and applying the new firmware, then it will reboot.</p>"
               "<p>It may be unreachable for about a minute. This page reloads automatically.</p>"
               "</body></html>");
+            out.flush();
             client.flush();
             client.stop();
             server.end();     // free the :80 listening socket
@@ -627,25 +707,27 @@ void handleWebRequest() {
             // (and any later reload, e.g. the dashboard's /CHECK_LOCK polling)
             // never points at an action URL with stale query params — see the
             // comment on handleRoutes() for why that matters.
-            client.println("HTTP/1.1 302 Found");
-            client.println("Location: /?" + pinParam);
-            client.println("Connection: close");
-            client.println();
+            out.println("HTTP/1.1 302 Found");
+            out.println("Location: /?" + pinParam);
+            out.println("Connection: close");
+            out.println();
           } else {
-            // Force a fresh OTA check on every real dashboard load while there's
+            // Force a fresh OTA check on a real dashboard load while there's
             // OTA state worth re-verifying (a pending update or a failed apply) —
             // otherwise the card stays stuck showing "UPDATE NOW"/the old error
             // until the next periodic check (up to OTA_CHECK_INTERVAL) or a manual
-            // "Check for updates" tap. Skipped when everything's already idle, so
-            // routine clicks (which also land here after their redirect) don't
-            // pay for an extra network round-trip on every action.
-            if (otaState == OTA_ERROR || otaUpdateAvailable) {
+            // "Check for updates" tap. Skipped when everything's already idle, and
+            // throttled to at most once per OTA_DASHBOARD_RECHECK_MS, so page
+            // loads don't pay a blocking HTTPS round-trip every time.
+            if ((otaState == OTA_ERROR || otaUpdateAvailable)
+                && (millis() - lastOtaCheck >= OTA_DASHBOARD_RECHECK_MS)) {
               lastOtaCheck = 0;
               checkForUpdateIfNeeded();
             }
             bool scheduleLocked = isScheduleLocked();
-            renderDashboard(client, hp, pinParam, scheduleLocked);
+            renderDashboard(out, hp, pinParam, scheduleLocked);
           }
+          out.flush();
           break;
 
         } else {

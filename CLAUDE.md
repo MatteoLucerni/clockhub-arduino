@@ -60,10 +60,6 @@ src/root_ca.h        — CA cert for raw.githubusercontent.com (OTA downloads)
 src/config.h         — AUTO-GENERATED, gitignored (see "Credentials" below)
 ```
 
-`tools/mock_server.py` is a Python port of the dashboard for testing the UI
-without hardware — keep it in sync whenever `web_server.cpp` HTML/CSS/routes
-change (same CSS classes, same route names, same confirm() text, etc.).
-
 ## Credentials — handle with care
 
 - `.env` (gitignored) holds real secrets: WiFi, VoiceMonkey API token, DuckDNS
@@ -74,20 +70,6 @@ change (same CSS classes, same route names, same confirm() text, etc.).
 - **Never print, log, or commit the contents of `.env` or `src/config.h`.**
   When discussing the CI workflow's `DOTENV_CONTENTS` secret, never echo its
   value.
-
-## Local UI testing (no hardware needed)
-
-```sh
-python tools/mock_server.py [port]   # default port 8080, binds 0.0.0.0
-```
-
-Reads `ACCESS_PIN` from `.env` (falls back to `1234`). Open
-`http://127.0.0.1:<port>/?pin=<ACCESS_PIN>`. Includes a "Dev Tools" card to
-time-travel the simulated clock (test alarm-window locking) and to simulate
-OTA update-available / apply-failure scenarios.
-
-After UI changes, verify by running the mock server and curling/driving the
-relevant routes — don't just eyeball the HTML string in the source.
 
 ## OTA update system ("OneTap")
 
@@ -152,10 +134,6 @@ relevant routes — don't just eyeball the HTML string in the source.
   which should match whatever language the Alexa device is configured for
   (currently Italian was changed to English per user request — confirm before
   reverting).
-- Keep `src/web_server.cpp` and `tools/mock_server.py` in sync: same CSS
-  (including the `.switch`/`.slider` toggle styles), same route names, same
-  card layout/order.
 - Toggle-style boolean settings (System Enabled, Pump/Light/Blind Enabled,
   per-day "active") use the `.switch`/`.slider` CSS toggle, built via the
-  `toggleSwitch()` (C++) / `toggle_switch()` (Python) helpers — not raw
-  `<input type="checkbox">`.
+  `toggleSwitch()` helper — not raw `<input type="checkbox">`.
