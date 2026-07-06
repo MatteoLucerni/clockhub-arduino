@@ -295,14 +295,18 @@ static bool handleRoutes(const String& request) {
     }
   }
   else if (request.indexOf("GET /OTA_CHECK") >= 0) {
-    lastOtaCheck = 0;
-    checkForUpdateIfNeeded();
+    if (otaCheckBusy()) {
+      otaCheckNote = "Device busy (pump or blind running). Try again shortly.";
+    } else {
+      checkForUpdateNow(2);
+    }
   }
   // NOTE: GET /OTA_APPLY is handled directly in handleWebRequest() (it must send
   // its response and close the socket BEFORE the blocking OTA), not here.
   else if (request.indexOf("GET /OTA_DISMISS") >= 0) {
     otaState = OTA_IDLE;
     otaErrorMsg = "";
+    otaCheckNote = "";
   }
 
   return matched;
@@ -491,11 +495,20 @@ static void renderFirmwareCard(BufferedClient& client, const String& pinParam, b
     if (scheduleLocked || blindManualActive) {
       client.println("<button type=\"button\" class=\"btn\" style=\"background:#ccc;cursor:not-allowed\" disabled>UPDATE NOW</button>");
     } else {
-      client.println("<a href=\"/OTA_APPLY?" + pinParam + "\" onclick=\"return confirm('Update firmware now? The device will reboot and may be unreachable for about a minute. The page will reload automatically.')\">");
+      client.println("<a href=\"/OTA_APPLY?" + pinParam + "\" onclick=\"return confirm('Update firmware now? The device will reboot and may be unreachable for a few minutes. The page returns to the dashboard automatically.')\">");
       client.println("<button class=\"btn btn-manual\">UPDATE NOW</button></a>");
     }
   } else {
     client.println("<p style=\"color:#8e8e93;font-size:0.85rem;margin:10px 0 0\">Firmware up to date</p>");
+  }
+
+  if (otaCheckNote.length() > 0) {
+    client.println("<p style=\"color:#ff9500;font-size:0.85rem;font-weight:bold;margin:10px 0 0\">" + otaCheckNote + "</p>");
+  }
+  if (otaLastCheckEpoch > 0) {
+    unsigned long secOfDay = otaLastCheckEpoch % 86400UL;
+    client.println("<p style=\"color:#8e8e93;font-size:0.75rem;margin:6px 0 0\">Last check: "
+      + formatTime((int)(secOfDay / 3600UL), (int)((secOfDay % 3600UL) / 60UL)) + "</p>");
   }
 
   client.println("<a href=\"/OTA_CHECK?" + pinParam + "\"><button class=\"btn btn-stop\" style=\"margin-top:8px\">Check for updates</button></a>");
@@ -680,12 +693,16 @@ void handleWebRequest() {
             out.println("Connection: close");
             out.println();
             out.println("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
-              "<meta http-equiv=\"refresh\" content=\"75;url=/?" + pinParam + "\">"
+              "<meta http-equiv=\"refresh\" content=\"180;url=/?" + pinParam + "\">"
               "<title>Updating...</title></head>"
               "<body style=\"font-family:sans-serif;text-align:center;padding-top:40px\">"
               "<h2>Firmware update in progress...</h2>"
               "<p>The device is downloading and applying the new firmware, then it will reboot.</p>"
-              "<p>It may be unreachable for about a minute. This page reloads automatically.</p>"
+              "<p>This page returns to the dashboard automatically as soon as the device is back online.</p>"
+              "<script>function n(){setTimeout(p,4000);}"
+              "function p(){fetch('/CHECK_LOCK',{cache:'no-store'}).then(function(r){"
+              "if(r.ok){location.replace('/?" + pinParam + "');}else{n();}}).catch(n);}"
+              "setTimeout(p,20000);</script>"
               "</body></html>");
             out.flush();
             client.flush();
@@ -720,9 +737,9 @@ void handleWebRequest() {
             // throttled to at most once per OTA_DASHBOARD_RECHECK_MS, so page
             // loads don't pay a blocking HTTPS round-trip every time.
             if ((otaState == OTA_ERROR || otaUpdateAvailable)
-                && (millis() - lastOtaCheck >= OTA_DASHBOARD_RECHECK_MS)) {
-              lastOtaCheck = 0;
-              checkForUpdateIfNeeded();
+                && (millis() - lastOtaCheck >= OTA_DASHBOARD_RECHECK_MS)
+                && !otaCheckBusy()) {
+              checkForUpdateNow(1);
             }
             bool scheduleLocked = isScheduleLocked();
             renderDashboard(out, hp, pinParam, scheduleLocked);

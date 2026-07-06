@@ -54,6 +54,8 @@ bool          otaUpdateAvailable = false;
 String        otaLatestVersion = "";
 String        otaErrorMsg = "";
 unsigned long lastOtaCheck = 0;
+String        otaCheckNote = "";
+unsigned long otaLastCheckEpoch = 0;
 
 const char* daysOfWeek[] = {
   "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"

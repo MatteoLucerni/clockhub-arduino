@@ -55,6 +55,8 @@ extern bool otaUpdateAvailable;
 extern String otaLatestVersion;
 extern String otaErrorMsg;
 extern unsigned long lastOtaCheck;
+extern String otaCheckNote;
+extern unsigned long otaLastCheckEpoch;
 
 // Day names
 extern const char* daysOfWeek[];

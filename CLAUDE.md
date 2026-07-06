@@ -10,9 +10,12 @@ wireless ("OneTap OTA") firmware updates.
 - PlatformIO env: `uno_r4_wifi` (platform `renesas-ra`, framework `arduino`)
 - PlatformIO executable: `C:\Users\Matteo\.platformio\penv\Scripts\pio.exe`
 - WiFi co-processor (ESP32-S3) connectivity firmware **must stay at 0.5.2** to
-  match the PlatformIO toolchain. `framework-arduinorenesas-uno` **1.5.1** is the
-  latest published (renesas-ra platform 1.8.0), and its OTAUpdate/Modem libraries
+  match the PlatformIO toolchain. `platformio.ini` pins `platform = renesas-ra@1.8.0`
+  (`framework-arduinorenesas-uno` **1.5.1**), whose OTAUpdate/Modem libraries
   target firmware **0.5.2** (`WIFI_FIRMWARE_LATEST_VERSION` in `WiFiS3/WiFi.h`).
+  Newer platforms (1.9.0+ / framework 1.6.0+) target modem firmware **0.6.0** —
+  do NOT remove the pin without also updating the board firmware and this note;
+  the pin was a deliberate choice (2026-07-07) to keep OTA working on 0.5.2.
   **Do NOT upgrade the board firmware past 0.5.2** (e.g. to 0.6.0 via Arduino IDE):
   `download()`/`verify()` still work, but the firmware-transfer step `update()`
   speaks the old protocol to the newer firmware and dies with an ESP32
