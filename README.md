@@ -2,7 +2,7 @@
 
 A smart wake-up light system built on the **Arduino UNO R4 WiFi**.
 
-The device runs a local web server for schedule configuration, triggers a VoiceMonkey Alexa announcement before wake-up time, activates a pump (connected to a grow light or similar device) at the scheduled alarm, and drives a motorized blind on its own schedule. Network presence is maintained via DuckDNS dynamic DNS, and firmware can be updated wirelessly ("OneTap OTA").
+The device runs a local web server for schedule configuration, triggers a VoiceMonkey Alexa announcement before wake-up time, activates a pump (connected to a grow light or similar device) at the scheduled alarm, and drives a motorized blind on its own schedule. Network presence is maintained via DuckDNS dynamic DNS, and firmware can be updated wirelessly ("OneTap OTA")
 
 ## Features
 
@@ -25,12 +25,12 @@ The device runs a local web server for schedule configuration, triggers a VoiceM
 
 ## Hardware
 
-| Component | Details |
-|-----------|---------|
-| Microcontroller | Arduino UNO R4 WiFi |
-| Pump output | Pin 7 (pump / relay control) |
+| Component          | Details                            |
+| ------------------ | ---------------------------------- |
+| Microcontroller    | Arduino UNO R4 WiFi                |
+| Pump output        | Pin 7 (pump / relay control)       |
 | Blind motor driver | ENA: pin 9, IN1: pin 8, IN2: pin 6 |
-| Power | USB or DC barrel jack |
+| Power              | USB or DC barrel jack              |
 
 ## Prerequisites
 
@@ -135,22 +135,22 @@ clockhub-arduino/
 
 ## Web Interface Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `/` | PIN page (unauthenticated) or main dashboard (with valid `pin=` param) |
-| `/LOGIN` | Validate PIN and redirect to the dashboard |
-| `/SAVE_ALL` | Save weekly schedule, system/pump/light/blind enable flags, pump duration, light lead time, and blind timing/position settings (single combined form) |
-| `/ARM_ONESHOT` | Arm the one-shot alarm: hours/minutes from now, pump/light/blind flags, light/blind lead times |
-| `/CANCEL_ONESHOT` | Disarm the one-shot alarm (always allowed, even during its own lock window) |
-| `/TOGGLE` | Manual pump on/off override |
-| `/BLIND_OPEN` / `/BLIND_CLOSE` / `/BLIND_STOP` | Manual blind control |
-| `/BLIND_FORCE_POS?pos=0\|100` | Reset the tracked blind position without moving the motor |
-| `/SET_SLEEP_DELAY` | Update falling-asleep delay |
-| `/CALC_BED` | Calculate optimal bedtimes |
-| `/CHECK_LOCK` | Lock state query (`0` or `1`, used by dashboard JS polling) |
-| `/OTA_CHECK` | Force an immediate check for a new firmware version |
-| `/OTA_APPLY` | Download, verify and apply the latest OTA firmware, then reboot |
-| `/OTA_DISMISS` | Clear an OTA error message |
+| Endpoint                                       | Description                                                                                                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                                            | PIN page (unauthenticated) or main dashboard (with valid `pin=` param)                                                                                |
+| `/LOGIN`                                       | Validate PIN and redirect to the dashboard                                                                                                            |
+| `/SAVE_ALL`                                    | Save weekly schedule, system/pump/light/blind enable flags, pump duration, light lead time, and blind timing/position settings (single combined form) |
+| `/ARM_ONESHOT`                                 | Arm the one-shot alarm: hours/minutes from now, pump/light/blind flags, light/blind lead times                                                        |
+| `/CANCEL_ONESHOT`                              | Disarm the one-shot alarm (always allowed, even during its own lock window)                                                                           |
+| `/TOGGLE`                                      | Manual pump on/off override                                                                                                                           |
+| `/BLIND_OPEN` / `/BLIND_CLOSE` / `/BLIND_STOP` | Manual blind control                                                                                                                                  |
+| `/BLIND_FORCE_POS?pos=0\|100`                  | Reset the tracked blind position without moving the motor                                                                                             |
+| `/SET_SLEEP_DELAY`                             | Update falling-asleep delay                                                                                                                           |
+| `/CALC_BED`                                    | Calculate optimal bedtimes                                                                                                                            |
+| `/CHECK_LOCK`                                  | Lock state query (`0` or `1`, used by dashboard JS polling)                                                                                           |
+| `/OTA_CHECK`                                   | Force an immediate check for a new firmware version                                                                                                   |
+| `/OTA_APPLY`                                   | Download, verify and apply the latest OTA firmware, then reboot                                                                                       |
+| `/OTA_DISMISS`                                 | Clear an OTA error message                                                                                                                            |
 
 ### PIN authentication
 
